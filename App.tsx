@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
 import ImageUploader from './components/ImageUploader';
-import DKGPlayer from './components/DKGPlayer';
-import { generateTurntableGrid } from './services/geminiService';
+import OrbitalMode from './ui/orbital/OrbitalMode';
+import { generateOrbitalAssets } from './services/OrbitalGenService';
 import { ImageState, BatchItem } from './types';
 
 const KINETIC_LOGS = [
@@ -29,6 +29,10 @@ const App: React.FC = () => {
   useEffect(() => {
     const checkAuth = async () => {
       try {
+        if (import.meta.env.VITE_GEMINI_API_KEY) {
+          setHasKey(true);
+          return;
+        }
         const isAuthed = await (window as any).aistudio.hasSelectedApiKey();
         setHasKey(isAuthed);
       } catch (e) {
@@ -38,8 +42,25 @@ const App: React.FC = () => {
     checkAuth();
   }, []);
 
+  const resolveApiKey = async () => {
+    const envKey = import.meta.env.VITE_GEMINI_API_KEY;
+    if (envKey) {
+      return envKey as string;
+    }
+    const aistudio = (window as any).aistudio;
+    if (aistudio?.getSelectedApiKey) {
+      const selected = aistudio.getSelectedApiKey();
+      return typeof selected === 'string' ? selected : await selected;
+    }
+    return '';
+  };
+
   const handleEstablishAuth = async () => {
     try {
+      if (import.meta.env.VITE_GEMINI_API_KEY) {
+        setHasKey(true);
+        return;
+      }
       await (window as any).aistudio.openSelectKey();
       setHasKey(true);
     } catch (e) {
@@ -71,10 +92,19 @@ const App: React.FC = () => {
     }, 1200);
 
     try {
-      const result = await generateTurntableGrid(finalName, images.front!, images.back);
+      if (!images.back) {
+        throw new Error("BACK_REFERENCE_REQUIRED");
+      }
+      const apiKey = await resolveApiKey();
+      const result = await generateOrbitalAssets(
+        finalName,
+        images.front!,
+        images.back,
+        apiKey
+      );
       setBatch(prev => prev.map(item => 
         item.id === id 
-          ? { ...item, status: 'COMPLETE' as const, resultUrl: result } 
+          ? { ...item, status: 'COMPLETE' as const, orbitalAssets: result } 
           : item
       ));
     } catch (err: any) {
@@ -197,7 +227,7 @@ const App: React.FC = () => {
 
                     <button 
                       onClick={handleGenerate}
-                      disabled={!images.front}
+                      disabled={!images.front || !images.back}
                       className="w-full py-5 bg-indigo-600 hover:bg-indigo-500 text-white font-black uppercase tracking-[0.2em] text-[11px] rounded-xl transition-all disabled:opacity-10 shadow-lg active:scale-95 border-b-4 border-indigo-800"
                     >
                       Process Grid
@@ -216,7 +246,7 @@ const App: React.FC = () => {
                     </div>
                   </div>
                   
-                  <div className="p-4 bg-indigo-900/10 border border-indigo-500/20 rounded-xl">
+                   <div className="p-4 bg-indigo-900/10 border border-indigo-500/20 rounded-xl">
                     <p className="text-[9px] text-indigo-300/60 leading-relaxed uppercase tracking-widest italic text-center">
                       * If Name is omitted, a unique timestamp-based identifier will be assigned automatically.
                     </p>
@@ -272,9 +302,13 @@ const App: React.FC = () => {
                          <div className="h-full bg-indigo-500 transition-all duration-1000" style={{ width: `${((logIdx + 1) / KINETIC_LOGS.length) * 100}%` }} />
                       </div>
                    </div>
-                 ) : activeGolem.resultUrl ? (
+                 ) : activeGolem.orbitalAssets ? (
                    <div className="w-full h-full max-w-4xl flex items-center justify-center">
-                      <DKGPlayer imageUrl={activeGolem.resultUrl} productName={activeGolem.productName} />
+                      <OrbitalMode
+                        ring0Url={activeGolem.orbitalAssets.pitch0Url}
+                        ring1Url={activeGolem.orbitalAssets.pitch30Url}
+                        productName={activeGolem.productName}
+                      />
                    </div>
                  ) : (
                    <div className="max-w-xs w-full aspect-square bg-red-500/5 border-2 border-red-500/10 rounded-3xl flex flex-col items-center justify-center p-8 text-center">
