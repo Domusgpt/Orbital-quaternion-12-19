@@ -34,10 +34,6 @@ export interface BatchItem {
   status: 'PENDING' | 'SYNTHESIZING' | 'COMPLETE' | 'FAILED';
   progress: number;
   resultUrl?: string;
-  orbitalAssets?: {
-    pitch0Url: string;
-    pitch30Url: string;
-  };
   error?: string;
   images: ImageState;
 }
