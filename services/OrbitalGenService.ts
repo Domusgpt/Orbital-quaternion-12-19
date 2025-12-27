@@ -1,12 +1,9 @@
 import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
 import { QUADRANT_GRID, ANGULAR_LABELS } from "../core/QuadrantFrameMap";
 
-export type GenerationMode = 'turnstile' | 'orbital';
-
 export type OrbitalGridResult = {
   pitch0Url: string;
   pitch30Url: string;
-  mode: GenerationMode;
 };
 
 /**
@@ -25,8 +22,7 @@ export const generateOrbitalAssets = async (
   productName: string,
   frontImageBase64: string,
   backImageBase64: string,
-  apiKey: string,
-  mode: GenerationMode = 'orbital'
+  apiKey: string
 ): Promise<OrbitalGridResult> => {
   if (!apiKey) {
     throw new Error("AUTH_PROTOCOL_EXPIRED");
@@ -161,19 +157,12 @@ CRITICAL GENERATION RULES:
     return imageUrl;
   };
 
-  // Generate rings based on mode
-  const pitch0Url = await generateRing(0);
+  const [pitch0Url, pitch30Url] = await Promise.all([
+    generateRing(0),
+    generateRing(30)
+  ]);
 
-  let pitch30Url: string;
-  if (mode === 'orbital') {
-    // Orbital mode: generate second ring for pitch blending
-    pitch30Url = await generateRing(30);
-  } else {
-    // Turnstile mode: reuse pitch0 as pitch30 (single axis, no pitch variation)
-    pitch30Url = pitch0Url;
-  }
-
-  return { pitch0Url, pitch30Url, mode };
+  return { pitch0Url, pitch30Url };
 };
 
 /**
