@@ -30,7 +30,7 @@ export class OrbitalShaderManager {
       }
     `;
 
-    // Fragment shader with quadrant-based 4x4 grid and angular sequence lookup
+    // Fragment shader with smooth frame blending and motion effects
     const fragmentSource = `
       precision highp float;
 
@@ -42,19 +42,9 @@ export class OrbitalShaderManager {
       uniform float u_yaw;
       uniform float u_pitch;
       uniform float u_velocity;
-      uniform float u_renderMode; // 0 = orbital (16 frames), 1 = turnstile (8 frames)
+      uniform float u_renderMode; // 0 = orbital (with pitch), 1 = turnstile (single axis)
 
-      // Angular sequence lookup: maps angle index (0-15) to frame index
-      // Frame indices are NOT sequential - they follow compass quadrant grouping:
-      // Row 0: N(0), S(1), E(2), W(3)        - Cardinals
-      // Row 1: NW(4), NE(5), SE(6), SW(7)    - Intercardinals
-      // Row 2: NNW(8), NNE(9), SSE(10), SSW(11) - Fine N/S
-      // Row 3: WNW(12), ENE(13), ESE(14), WSW(15) - Fine E/W
-      //
-      // Angular order: N→NNE→NE→ENE→E→ESE→SE→SSE→S→SSW→SW→WSW→W→WNW→NW→NNW
-      // Which maps to frame indices: 0,9,5,13,2,14,6,10,1,11,7,15,3,12,4,8
-      // NOTE: Array initialization removed for WebGL1 compatibility - using getAngularFrame() instead
-
+      // Constants
       const float PI = 3.14159265359;
       const float TWO_PI = 6.28318530718;
       const float GRID_COLS = 4.0;
@@ -63,26 +53,16 @@ export class OrbitalShaderManager {
       const float DEGREES_PER_FRAME = 22.5;
 
       /**
-       * Sample a frame from the 4x4 quadrant grid
-       * frameIndex: 0-15, where row = floor(frameIndex/4), col = mod(frameIndex,4)
+       * Angular sequence lookup: maps angle index (0-15) to frame index in quadrant grid
+       * Frame layout follows compass quadrant grouping:
+       * Row 0: N(0), S(1), E(2), W(3)        - Cardinals
+       * Row 1: NW(4), NE(5), SE(6), SW(7)    - Intercardinals
+       * Row 2: NNW(8), NNE(9), SSE(10), SSW(11) - Fine N/S
+       * Row 3: WNW(12), ENE(13), ESE(14), WSW(15) - Fine E/W
+       *
+       * Angular order: N→NNE→NE→ENE→E→ESE→SE→SSE→S→SSW→SW→WSW→W→WNW→NW→NNW
        */
-      vec4 sampleQuadrantFrame(sampler2D tex, float frameIndex, vec2 uv) {
-        float col = mod(frameIndex, GRID_COLS);
-        float row = floor(frameIndex / GRID_COLS);
-
-        vec2 finalUV = vec2(
-          (col + uv.x) / GRID_COLS,
-          1.0 - ((row + (1.0 - uv.y)) / GRID_ROWS)
-        );
-
-        return texture2D(tex, finalUV);
-      }
-
-      /**
-       * Get frame index for 16-frame ORBITAL mode (quadrant layout)
-       * WebGL1 compatible - uses if-else chain for array access
-       */
-      float getOrbitalFrame(int angleIndex) {
+      float getFrameIndex(int angleIndex) {
         int idx = int(mod(float(angleIndex), 16.0));
 
         if (idx == 0) return 0.0;   // N (0°)
@@ -104,79 +84,112 @@ export class OrbitalShaderManager {
       }
 
       /**
-       * Get frame index for 8-frame TURNSTILE mode (simple sequential)
-       * Uses first 2 rows of quadrant grid (cardinals + intercardinals)
-       * Angular order: N(0°) → NE(45°) → E(90°) → SE(135°) → S(180°) → SW(225°) → W(270°) → NW(315°)
+       * Sample a frame from the 4x4 quadrant grid
        */
-      float getTurnstileFrame(int angleIndex) {
-        int idx = int(mod(float(angleIndex), 8.0));
+      vec4 sampleFrame(sampler2D tex, float frameIndex, vec2 uv) {
+        float col = mod(frameIndex, GRID_COLS);
+        float row = floor(frameIndex / GRID_COLS);
 
-        if (idx == 0) return 0.0;  // N (0°) - row 0, col 0
-        if (idx == 1) return 5.0;  // NE (45°) - row 1, col 1
-        if (idx == 2) return 2.0;  // E (90°) - row 0, col 2
-        if (idx == 3) return 6.0;  // SE (135°) - row 1, col 2
-        if (idx == 4) return 1.0;  // S (180°) - row 0, col 1
-        if (idx == 5) return 7.0;  // SW (225°) - row 1, col 3
-        if (idx == 6) return 3.0;  // W (270°) - row 0, col 3
-        return 4.0;                // NW (315°) - row 1, col 0
+        vec2 frameUV = vec2(
+          (col + uv.x) / GRID_COLS,
+          1.0 - ((row + (1.0 - uv.y)) / GRID_ROWS)
+        );
+
+        return texture2D(tex, frameUV);
+      }
+
+      /**
+       * Sample with slight UV offset for motion blur effect
+       */
+      vec4 sampleFrameBlurred(sampler2D tex, float frameIndex, vec2 uv, float blurAmount) {
+        vec4 center = sampleFrame(tex, frameIndex, uv);
+
+        if (abs(blurAmount) < 0.01) {
+          return center;
+        }
+
+        // Sample offset positions for horizontal motion blur
+        vec2 offset = vec2(blurAmount * 0.02, 0.0);
+        vec4 left = sampleFrame(tex, frameIndex, uv - offset);
+        vec4 right = sampleFrame(tex, frameIndex, uv + offset);
+
+        // Weighted blend for motion blur
+        return center * 0.5 + left * 0.25 + right * 0.25;
+      }
+
+      /**
+       * Smooth interpolation with ease-in-out curve
+       * Makes frame transitions feel more natural
+       */
+      float smoothBlend(float t) {
+        // Hermite interpolation (smoothstep)
+        return t * t * (3.0 - 2.0 * t);
+      }
+
+      /**
+       * Even smoother interpolation for very fluid motion
+       */
+      float smootherBlend(float t) {
+        // Ken Perlin's smootherstep
+        return t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
       }
 
       void main() {
         // Convert yaw (radians) to degrees, normalize to 0-360
         float yawDeg = u_yaw * 57.2957795131; // 180/PI
-        yawDeg = mod(yawDeg, 360.0);
-        if (yawDeg < 0.0) {
-          yawDeg += 360.0;
+        yawDeg = mod(yawDeg + 360.0, 360.0);
+
+        // Calculate which frames to blend (always 16 frames, 22.5° each)
+        float angleFloat = yawDeg / DEGREES_PER_FRAME;
+        int angleIndexA = int(floor(angleFloat));
+        int angleIndexB = int(mod(float(angleIndexA + 1), TOTAL_FRAMES));
+
+        // Get actual frame indices from quadrant layout
+        float frameA = getFrameIndex(angleIndexA);
+        float frameB = getFrameIndex(angleIndexB);
+
+        // Calculate blend factor with smooth interpolation
+        float rawBlend = fract(angleFloat);
+        float blend = smootherBlend(rawBlend);
+
+        // Velocity-based motion enhancement
+        float absVelocity = abs(u_velocity);
+        float motionBlur = absVelocity * 0.5; // Motion blur amount
+
+        // When spinning fast, bias blend toward direction of motion
+        float velocityBias = 0.0;
+        if (absVelocity > 0.5) {
+          velocityBias = sign(u_velocity) * min(absVelocity * 0.1, 0.2);
         }
+        blend = clamp(blend + velocityBias, 0.0, 1.0);
 
-        // Calculate frame indices based on render mode
-        float frameA;
-        float frameB;
-        float interp;
+        // Sample frames with motion blur
+        vec4 colorA = sampleFrameBlurred(u_textureRing0, frameA, v_uv, motionBlur);
+        vec4 colorB = sampleFrameBlurred(u_textureRing0, frameB, v_uv, motionBlur);
 
-        if (u_renderMode < 0.5) {
-          // ORBITAL MODE: 16 frames, 22.5° each
-          float angleFloat = yawDeg / 22.5;
-          int angleIndexA = int(floor(angleFloat));
-          int angleIndexB = int(mod(float(angleIndexA + 1), 16.0));
-          frameA = getOrbitalFrame(angleIndexA);
-          frameB = getOrbitalFrame(angleIndexB);
-          interp = fract(angleFloat);
-        } else {
-          // TURNSTILE MODE: 8 frames, 45° each
-          float angleFloat = yawDeg / 45.0;
-          int angleIndexA = int(floor(angleFloat));
-          int angleIndexB = int(mod(float(angleIndexA + 1), 8.0));
-          frameA = getTurnstileFrame(angleIndexA);
-          frameB = getTurnstileFrame(angleIndexB);
-          interp = fract(angleFloat);
-        }
-
-        // Minimal velocity-based motion blur (velocity is now clamped to -3..3)
-        float velocityBlur = clamp(abs(u_velocity) * 0.05, 0.0, 0.15);
-        float blend = clamp(interp + velocityBlur, 0.0, 1.0);
-
-        // Sample and blend frames from Ring 0 (pitch 0°)
-        vec4 color0A = sampleQuadrantFrame(u_textureRing0, frameA, v_uv);
-        vec4 color0B = sampleQuadrantFrame(u_textureRing0, frameB, v_uv);
-        vec4 color0 = mix(color0A, color0B, blend);
+        // Smooth cross-fade between frames
+        vec4 color0 = mix(colorA, colorB, blend);
 
         vec4 finalColor;
+
         if (u_renderMode < 0.5) {
-          // ORBITAL MODE: blend with pitch ring
-          vec4 color1A = sampleQuadrantFrame(u_textureRing1, frameA, v_uv);
-          vec4 color1B = sampleQuadrantFrame(u_textureRing1, frameB, v_uv);
+          // ORBITAL MODE: Blend with pitch ring for vertical angle
+          vec4 color1A = sampleFrameBlurred(u_textureRing1, frameA, v_uv, motionBlur);
+          vec4 color1B = sampleFrameBlurred(u_textureRing1, frameB, v_uv, motionBlur);
           vec4 color1 = mix(color1A, color1B, blend);
-          float pitchBlend = clamp(u_pitch / 30.0, 0.0, 1.0);
+
+          // Smooth pitch blending (0-30° range)
+          float pitchNorm = clamp(u_pitch / 30.0, 0.0, 1.0);
+          float pitchBlend = smoothBlend(pitchNorm);
           finalColor = mix(color0, color1, pitchBlend);
         } else {
-          // TURNSTILE MODE: no pitch blending, just ring 0
+          // TURNSTILE MODE: Single axis, no pitch blending
           finalColor = color0;
         }
 
-        // Remove pure white background (luminance > 0.98)
+        // Alpha handling for white backgrounds
         float lum = dot(finalColor.rgb, vec3(0.299, 0.587, 0.114));
-        if (lum > 0.98) {
+        if (lum > 0.97) {
           finalColor.a = 0.0;
         }
 

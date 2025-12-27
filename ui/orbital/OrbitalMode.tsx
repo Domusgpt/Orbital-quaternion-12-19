@@ -174,7 +174,7 @@ const OrbitalMode: React.FC<OrbitalModeProps> = ({ ring0Url, ring1Url, productNa
               : 'bg-amber-600 text-white border border-amber-400'
           }`}
         >
-          {renderMode === 'orbital' ? 'ORBITAL_16' : 'TURNSTILE_8'}
+          {renderMode === 'orbital' ? 'ORBITAL' : 'TURNSTILE'}
         </button>
         <button
           onClick={() => setDebugMode(!debugMode)}
@@ -294,9 +294,9 @@ const OrbitalMode: React.FC<OrbitalModeProps> = ({ ring0Url, ring1Url, productNa
               <div className="text-white text-sm">{debugInfo.webglVersion}</div>
             </div>
             <div className={`rounded p-2 ${debugInfo.renderMode === 'orbital' ? 'bg-indigo-900/30' : 'bg-amber-900/30'}`}>
-              <div className="text-[8px] text-green-400 uppercase">Render Mode</div>
+              <div className="text-[8px] text-green-400 uppercase">Mode (16 frames)</div>
               <div className={`font-bold text-sm ${debugInfo.renderMode === 'orbital' ? 'text-indigo-300' : 'text-amber-300'}`}>
-                {debugInfo.renderMode === 'orbital' ? 'ORBITAL (16)' : 'TURNSTILE (8)'}
+                {debugInfo.renderMode === 'orbital' ? 'ORBITAL +pitch' : 'TURNSTILE'}
               </div>
             </div>
             <div className="bg-white/5 rounded p-2">
