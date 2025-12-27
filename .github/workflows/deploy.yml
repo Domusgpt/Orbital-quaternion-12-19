@@ -1,17 +1,30 @@
 name: Deploy to GitHub Pages
 
 on:
+  # Deploy on push to main
   push:
     branches: [ main ]
+
+  # Deploy on PR (for preview)
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+  # Manual trigger - deploy ANY branch
   workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to deploy (leave empty for current branch)'
+        required: false
+        default: ''
 
 permissions:
   contents: read
   pages: write
   id-token: write
+  pull-requests: write
 
 concurrency:
-  group: pages
+  group: pages-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
@@ -20,6 +33,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch || github.head_ref || github.ref }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -35,6 +50,8 @@ jobs:
           # Prevent secrets from being baked into the static bundle; runtime key entry is handled client-side.
           VITE_GEMINI_API_KEY: ""
           GEMINI_API_KEY: ""
+          # Pass repo name for GitHub Pages base path
+          GITHUB_REPOSITORY: ${{ github.repository }}
         run: npm run build
 
       - name: Upload artifact
@@ -42,9 +59,11 @@ jobs:
         with:
           path: dist
 
+  # Deploy to GitHub Pages (main branch or manual trigger)
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -52,3 +71,21 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+  # Comment on PR with build status
+  pr-comment:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Comment build success
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const branch = context.payload.pull_request.head.ref;
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `✅ **Build successful** for branch \`${branch}\`\n\nTo deploy this branch to GitHub Pages:\n1. Go to **Actions** tab\n2. Select **Deploy to GitHub Pages**\n3. Click **Run workflow**\n4. Enter branch: \`${branch}\`\n5. Click **Run workflow**`
+            });

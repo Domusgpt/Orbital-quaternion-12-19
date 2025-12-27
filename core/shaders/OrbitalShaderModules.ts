@@ -1,9 +1,18 @@
+import { ANGULAR_SEQUENCE, GRID_COLS, GRID_ROWS } from "../QuadrantFrameMap";
+
 export class OrbitalShaderManager {
   private gl: WebGLRenderingContext | WebGL2RenderingContext;
   public program: WebGLProgram | null = null;
 
   constructor(gl: WebGLRenderingContext | WebGL2RenderingContext) {
     this.gl = gl;
+  }
+
+  /**
+   * Get the angular sequence as a Float32Array for uniform upload
+   */
+  static getAngularSequenceArray(): Float32Array {
+    return new Float32Array(ANGULAR_SEQUENCE);
   }
 
   createProgram(): WebGLProgram | null {
@@ -37,6 +46,7 @@ export class OrbitalShaderManager {
       }
     `;
 
+    // Fragment shader with quadrant-based 4x4 grid and angular sequence lookup
     const fragmentSource = `
       precision highp float;
 
@@ -49,45 +59,122 @@ export class OrbitalShaderManager {
       uniform float u_pitch;
       uniform float u_velocity;
 
-      const float PI = 3.14159265359;
+      // Angular sequence lookup: maps angle index (0-15) to frame index
+      // Frame indices are NOT sequential - they follow compass quadrant grouping:
+      // Row 0: N(0), S(1), E(2), W(3)        - Cardinals
+      // Row 1: NW(4), NE(5), SE(6), SW(7)    - Intercardinals
+      // Row 2: NNW(8), NNE(9), SSE(10), SSW(11) - Fine N/S
+      // Row 3: WNW(12), ENE(13), ESE(14), WSW(15) - Fine E/W
+      //
+      // Angular order: N→NNE→NE→ENE→E→ESE→SE→SSE→S→SSW→SW→WSW→W→WNW→NW→NNW
+      // Which maps to frame indices: 0,9,5,13,2,14,6,10,1,11,7,15,3,12,4,8
+      const float ANGULAR_SEQ[16] = float[16](
+        0.0,  // Angle 0:  N     (0°)
+        9.0,  // Angle 1:  NNE   (22.5°)
+        5.0,  // Angle 2:  NE    (45°)
+        13.0, // Angle 3:  ENE   (67.5°)
+        2.0,  // Angle 4:  E     (90°)
+        14.0, // Angle 5:  ESE   (112.5°)
+        6.0,  // Angle 6:  SE    (135°)
+        10.0, // Angle 7:  SSE   (157.5°)
+        1.0,  // Angle 8:  S     (180°)
+        11.0, // Angle 9:  SSW   (202.5°)
+        7.0,  // Angle 10: SW    (225°)
+        15.0, // Angle 11: WSW   (247.5°)
+        3.0,  // Angle 12: W     (270°)
+        12.0, // Angle 13: WNW   (292.5°)
+        4.0,  // Angle 14: NW    (315°)
+        8.0   // Angle 15: NNW   (337.5°)
+      );
 
-      vec4 sampleGridFrame(sampler2D tex, float frameIndex, vec2 uv) {
-        float col = mod(frameIndex, 4.0);
-        float row = floor(frameIndex / 4.0);
+      const float PI = 3.14159265359;
+      const float TWO_PI = 6.28318530718;
+      const float GRID_COLS = 4.0;
+      const float GRID_ROWS = 4.0;
+      const float TOTAL_FRAMES = 16.0;
+      const float DEGREES_PER_FRAME = 22.5;
+
+      /**
+       * Sample a frame from the 4x4 quadrant grid
+       * frameIndex: 0-15, where row = floor(frameIndex/4), col = mod(frameIndex,4)
+       */
+      vec4 sampleQuadrantFrame(sampler2D tex, float frameIndex, vec2 uv) {
+        float col = mod(frameIndex, GRID_COLS);
+        float row = floor(frameIndex / GRID_COLS);
 
         vec2 finalUV = vec2(
-          (col + uv.x) / 4.0,
-          1.0 - ((row + (1.0 - uv.y)) / 2.0)
+          (col + uv.x) / GRID_COLS,
+          1.0 - ((row + (1.0 - uv.y)) / GRID_ROWS)
         );
 
         return texture2D(tex, finalUV);
       }
 
+      /**
+       * Get frame index from angular sequence using indexing
+       * WebGL1 compatible - uses if-else chain for array access
+       */
+      float getAngularFrame(int angleIndex) {
+        // Wrap to 0-15
+        int idx = int(mod(float(angleIndex), 16.0));
+
+        if (idx == 0) return 0.0;
+        if (idx == 1) return 9.0;
+        if (idx == 2) return 5.0;
+        if (idx == 3) return 13.0;
+        if (idx == 4) return 2.0;
+        if (idx == 5) return 14.0;
+        if (idx == 6) return 6.0;
+        if (idx == 7) return 10.0;
+        if (idx == 8) return 1.0;
+        if (idx == 9) return 11.0;
+        if (idx == 10) return 7.0;
+        if (idx == 11) return 15.0;
+        if (idx == 12) return 3.0;
+        if (idx == 13) return 12.0;
+        if (idx == 14) return 4.0;
+        return 8.0; // idx == 15
+      }
+
       void main() {
-        float normAngle = fract(u_yaw / (2.0 * PI));
-        if (normAngle < 0.0) {
-          normAngle += 1.0;
+        // Convert yaw (radians) to degrees, normalize to 0-360
+        float yawDeg = u_yaw * 57.2957795131; // 180/PI
+        yawDeg = mod(yawDeg, 360.0);
+        if (yawDeg < 0.0) {
+          yawDeg += 360.0;
         }
 
-        float frameFloat = normAngle * 8.0;
-        float frameIndex = floor(frameFloat);
-        float interp = fract(frameFloat);
-        float nextIndex = mod(frameIndex + 1.0, 8.0);
+        // Calculate which angle index we're at (0-15, each covers 22.5°)
+        float angleFloat = yawDeg / DEGREES_PER_FRAME;
+        int angleIndexA = int(floor(angleFloat));
+        int angleIndexB = int(mod(float(angleIndexA + 1), 16.0));
 
+        // Get the actual frame indices from the angular sequence
+        float frameA = getAngularFrame(angleIndexA);
+        float frameB = getAngularFrame(angleIndexB);
+
+        // Calculate blend factor between the two frames
+        float interp = fract(angleFloat);
+
+        // Add velocity-based motion blur for smoother animation
         float velocityBlur = clamp(abs(u_velocity) * 0.12, 0.0, 0.6);
         float blend = clamp(interp + velocityBlur, 0.0, 1.0);
 
-        vec4 color0A = sampleGridFrame(u_textureRing0, frameIndex, v_uv);
-        vec4 color0B = sampleGridFrame(u_textureRing0, nextIndex, v_uv);
+        // Sample and blend frames from Ring 0 (pitch 0°)
+        vec4 color0A = sampleQuadrantFrame(u_textureRing0, frameA, v_uv);
+        vec4 color0B = sampleQuadrantFrame(u_textureRing0, frameB, v_uv);
         vec4 color0 = mix(color0A, color0B, blend);
 
-        vec4 color1A = sampleGridFrame(u_textureRing1, frameIndex, v_uv);
-        vec4 color1B = sampleGridFrame(u_textureRing1, nextIndex, v_uv);
+        // Sample and blend frames from Ring 1 (pitch 30°)
+        vec4 color1A = sampleQuadrantFrame(u_textureRing1, frameA, v_uv);
+        vec4 color1B = sampleQuadrantFrame(u_textureRing1, frameB, v_uv);
         vec4 color1 = mix(color1A, color1B, blend);
 
-        float blendFactor = clamp(u_pitch / 30.0, 0.0, 1.0);
-        vec4 finalColor = mix(color0, color1, blendFactor);
+        // Blend between pitch rings based on current pitch angle
+        float pitchBlend = clamp(u_pitch / 30.0, 0.0, 1.0);
+        vec4 finalColor = mix(color0, color1, pitchBlend);
 
+        // Remove pure white background (luminance > 0.98)
         float lum = dot(finalColor.rgb, vec3(0.299, 0.587, 0.114));
         if (lum > 0.98) {
           finalColor.a = 0.0;

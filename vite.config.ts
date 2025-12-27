@@ -7,8 +7,13 @@ export default defineConfig(({ mode }) => {
 
   const resolvedGeminiKey = env.VITE_GEMINI_API_KEY || env.GEMINI_API_KEY || "";
 
+  // For GitHub Pages: use repo name as base path, or "/" for custom domain
+  const base = process.env.GITHUB_REPOSITORY
+    ? `/${process.env.GITHUB_REPOSITORY.split('/')[1]}/`
+    : "/";
+
   return {
-    base: "./", // relative paths keep asset resolution correct on GitHub Pages
+    base, // Set dynamically for GitHub Pages deployment
     server: {
       port: 3000,
       host: "0.0.0.0",
