@@ -16,33 +16,17 @@ export class OrbitalShaderManager {
   }
 
   createProgram(): WebGLProgram | null {
+    // Clean vertex shader - no distortion effects for stable display
     const vertexSource = `
       precision highp float;
 
       attribute vec2 a_position;
       varying vec2 v_uv;
 
-      uniform float u_velocity;
-      uniform float u_warpFactor;
-      uniform float u_pitch;
-
       void main() {
+        // Simple UV mapping - no distortion
         v_uv = a_position * 0.5 + 0.5;
-
-        vec3 pos = vec3(a_position, 0.0);
-
-        float inertialShear = u_velocity * 0.15;
-        pos.x += pos.y * inertialShear;
-
-        float cylinderCurve = cos(pos.x * 1.5) * u_warpFactor;
-        pos.z -= cylinderCurve;
-
-        float pitchRad = u_pitch * 0.0174533;
-        float originalY = pos.y;
-        pos.y = originalY * cos(pitchRad) + pos.z * sin(pitchRad);
-        pos.z = pos.z * cos(pitchRad) - originalY * sin(pitchRad);
-
-        gl_Position = vec4(pos, 1.0);
+        gl_Position = vec4(a_position, 0.0, 1.0);
       }
     `;
 
@@ -139,8 +123,8 @@ export class OrbitalShaderManager {
         // Calculate blend factor between the two frames
         float interp = fract(angleFloat);
 
-        // Add velocity-based motion blur for smoother animation
-        float velocityBlur = clamp(abs(u_velocity) * 0.12, 0.0, 0.6);
+        // Minimal velocity-based motion blur (velocity is now clamped to -3..3)
+        float velocityBlur = clamp(abs(u_velocity) * 0.05, 0.0, 0.15);
         float blend = clamp(interp + velocityBlur, 0.0, 1.0);
 
         // Sample and blend frames from Ring 0 (pitch 0°)

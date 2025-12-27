@@ -168,9 +168,13 @@ export class ProductOrbitVisualizer {
     this.currentPitch += xEnergy * 5.0;
     this.currentPitch = Math.max(0, Math.min(30, this.currentPitch));
 
+    // Calculate velocity with proper clamping to prevent extreme values
     const velocityScale = dt > 0 ? 1 / dt : 1;
     const instantaneousVelocity = yEnergy * velocityScale;
-    this.velocity = this.velocity * 0.85 + instantaneousVelocity * 0.15;
+    // Smooth velocity with stronger damping
+    this.velocity = this.velocity * 0.9 + instantaneousVelocity * 0.1;
+    // CLAMP velocity to sane bounds to prevent spaghetti distortion
+    this.velocity = Math.max(-3, Math.min(3, this.velocity));
   }
 
   render() {
@@ -183,11 +187,14 @@ export class ProductOrbitVisualizer {
 
     this.gl.useProgram(this.program);
 
-    const warpFactor = Math.min(0.35, 0.08 + Math.abs(this.velocity) * 0.05);
+    // Disable warp effect entirely for stable display
+    const warpFactor = 0;
+    // Clamp velocity for shader (already clamped but be safe)
+    const clampedVelocity = Math.max(-3, Math.min(3, this.velocity));
 
     this.gl.uniform1f(this.uniforms.yaw, this.currentYaw);
     this.gl.uniform1f(this.uniforms.pitch, this.currentPitch);
-    this.gl.uniform1f(this.uniforms.velocity, this.velocity);
+    this.gl.uniform1f(this.uniforms.velocity, clampedVelocity);
     this.gl.uniform1f(this.uniforms.warp, warpFactor);
 
     this.gl.uniform1i(this.uniforms.textureRing0, 0);
@@ -207,13 +214,14 @@ export class ProductOrbitVisualizer {
   getDebugInfo(): DebugInfo {
     const yawDeg = (this.currentYaw * 180) / Math.PI;
     const { frameA, frameB, blend } = getBlendFrames(yawDeg);
-    const warpFactor = Math.min(0.35, 0.08 + Math.abs(this.velocity) * 0.05);
+    // Warp is disabled, velocity is clamped
+    const warpFactor = 0;
 
     return {
       yawRad: this.currentYaw,
       yawDeg: yawDeg,
       pitch: this.currentPitch,
-      velocity: this.velocity,
+      velocity: this.velocity, // Already clamped to -3..3
       warpFactor,
       frameA,
       frameB,
