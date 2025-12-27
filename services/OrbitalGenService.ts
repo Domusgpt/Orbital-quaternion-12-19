@@ -71,7 +71,7 @@ export const generateOrbitalAssets = async (
     return rows.join('\n\n');
   };
 
-  const BASE_PROMPT = `
+  const QUADRANT_PROMPT = `
 TASK: Generate a "Compass Quadrant Sprite Sheet" for "${productName}".
 SYSTEM ARCHITECTURE: 16-Point Compass Orbital System.
 
@@ -87,62 +87,60 @@ ${buildQuadrantDescription()}
 
 CRITICAL GENERATION RULES:
 
-1. RIGID ANGULAR CONSISTENCY:
-   - Each frame MUST show the object at its EXACT compass angle
-   - The HORIZONTAL ROTATION must match the specified degrees precisely
-   - N(0°) shows front, E(90°) shows right side, S(180°) shows back, W(270°) shows left side
-   - All intermediate angles follow the same rotation axis
+1. HIERARCHICAL IMPORTANCE:
+   - Row 1 (Cardinals) are the anchor frames - most important for recognition
+   - Row 2 (Intercardinals) bridge the 90° gaps smoothly
+   - Rows 3-4 (Fine directions) add smooth interpolation detail
 
-2. UNIFORM OBJECT ORIENTATION:
-   - The object must maintain the SAME vertical orientation in ALL frames
-   - Object should appear to rotate on a vertical axis (like a turntable)
-   - NO tilting, leaning, or varying perspectives between cells
-   - Each row must have consistent object positioning
+2. ANGULAR CONSISTENCY:
+   - Each frame MUST represent its exact compass direction
+   - Adjacent directions (22.5° apart) must blend smoothly
+   - N(0°) and NNW(337.5°) must visually connect (wrap-around)
 
-3. OBJECT IDENTITY PRESERVATION:
+3. OBJECT IDENTITY:
    - Product must be 100% identical in every frame
    - Only the viewing angle changes, never the object itself
-   - Maintain consistent scale, lighting, and detail level across all 16 frames
+   - Maintain consistent scale, lighting, and detail level
 
 4. TECHNICAL REQUIREMENTS:
-   - NO BORDERS: No grid lines, cell dividers, or text labels
-   - NO TEXT OR LABELS: Do not render direction names on the image
-   - CAMERA LOCK: Fixed height, fixed focal length, fixed distance
-   - PURE WHITE BACKGROUND: #FFFFFF exactly, no gradients or shadows
+   - NO BORDERS: No grid lines or text labels
+   - CAMERA LOCK: Fixed height, fixed focal length
+   - PURE WHITE BACKGROUND: #FFFFFF exactly
    - SEAMLESS EDGES: No artifacts at cell boundaries
 
-5. ROTATION REFERENCE (viewed from above, clockwise):
+5. ROTATION REFERENCE:
    - N (0°): Front view as shown in reference image
-   - E (90°): Right side visible (90° clockwise turn)
+   - Angles increase CLOCKWISE when viewed from above
+   - E (90°): 90° clockwise = right side visible
    - S (180°): Back view, opposite of front
-   - W (270°): Left side visible (270° clockwise turn)
+   - W (270°): 270° clockwise = left side visible
   `;
 
-  /**
-   * Generate Ring 0 (eye-level, pitch 0°) - the base reference sheet
-   */
-  const generateRing0 = async (): Promise<string> => {
-    const prompt = `
-      ${BASE_PROMPT}
+  const generateRing = async (pitchAngle: number): Promise<string> => {
+    const angleSpecificPrompt = `
+      ${QUADRANT_PROMPT}
 
-      CAMERA PITCH: 0° (Eye-level view)
-      - Camera is at the same height as the object center
-      - Horizontal viewing angle - not looking up or down
-      - This is the PRIMARY reference ring for animation
+      CAMERA PITCH CONFIGURATION:
+      - Pitch Angle: ${pitchAngle}° (degrees down from horizontal)
+      ${pitchAngle === 0
+        ? '- Context: EYE-LEVEL view ring - camera at object horizon'
+        : '- Context: ELEVATED view ring - camera looking down at object'}
+      ${pitchAngle === 30
+        ? '- Note: All 16 compass directions maintain their horizontal rotation, only vertical camera angle changes'
+        : ''}
     `;
 
     const response: GenerateContentResponse = await ai.models.generateContent({
-      model: "gemini-2.0-flash-exp",
+      model: "gemini-3-pro-image-preview",
       contents: {
         parts: [
           { inlineData: { data: frontData, mimeType: "image/png" } },
           { inlineData: { data: backData, mimeType: "image/png" } },
-          { text: prompt }
+          { text: angleSpecificPrompt }
         ]
       },
       config: {
-        responseModalities: ["image", "text"],
-        imageSafety: "block_only_high"
+        imageConfig: { aspectRatio: "1:1", imageSize: "1K" }
       }
     });
 
@@ -157,86 +155,21 @@ CRITICAL GENERATION RULES:
     }
 
     if (!imageUrl) {
-      throw new Error("Failed to generate Ring 0 (eye-level)");
+      throw new Error(`Failed to generate ring at ${pitchAngle}°`);
     }
 
     return imageUrl;
   };
 
-  /**
-   * Generate Ring 1 (elevated, pitch 30°) using Ring 0 as reference
-   * This ensures angular consistency between the two rings
-   */
-  const generateRing1 = async (ring0Base64: string): Promise<string> => {
-    const ring0Data = ring0Base64.split(",")[1];
-
-    const prompt = `
-      ${BASE_PROMPT}
-
-      CAMERA PITCH: 30° (Elevated view looking down)
-      - Camera is positioned above and looking down at 30° angle
-      - The object should appear as if viewed from above
-
-      CRITICAL ANGULAR MATCHING REQUIREMENT:
-      I am providing a REFERENCE SPRITE SHEET (Ring 0 at 0° pitch).
-      You MUST match the EXACT horizontal rotation angles from the reference.
-
-      For each cell in your output:
-      - The HORIZONTAL ROTATION must be IDENTICAL to the corresponding cell in the reference
-      - Only the VERTICAL VIEWING ANGLE (camera pitch) changes
-      - N(0°) in reference = N(0°) in your output, just viewed from 30° above
-      - E(90°) in reference = E(90°) in your output, just viewed from 30° above
-
-      The reference sheet shows the correct horizontal rotations.
-      Your sheet must show the SAME rotations but from a 30° elevated camera angle.
-
-      DO NOT change the object's rotation - only change the camera's vertical position.
-    `;
-
-    const response: GenerateContentResponse = await ai.models.generateContent({
-      model: "gemini-2.0-flash-exp",
-      contents: {
-        parts: [
-          { inlineData: { data: frontData, mimeType: "image/png" } },
-          { inlineData: { data: backData, mimeType: "image/png" } },
-          { inlineData: { data: ring0Data, mimeType: "image/png" } },
-          { text: prompt }
-        ]
-      },
-      config: {
-        responseModalities: ["image", "text"],
-        imageSafety: "block_only_high"
-      }
-    });
-
-    let imageUrl = "";
-    if (response.candidates?.[0]?.content?.parts) {
-      for (const part of response.candidates[0].content.parts) {
-        if (part.inlineData) {
-          imageUrl = `data:image/png;base64,${part.inlineData.data}`;
-          break;
-        }
-      }
-    }
-
-    if (!imageUrl) {
-      throw new Error("Failed to generate Ring 1 (elevated)");
-    }
-
-    return imageUrl;
-  };
-
-  // Generate Ring 0 first (always needed)
-  console.log("Generating Ring 0 (eye-level)...");
-  const pitch0Url = await generateRing0();
+  // Generate rings based on mode
+  const pitch0Url = await generateRing(0);
 
   let pitch30Url: string;
   if (mode === 'orbital') {
-    // Orbital mode: generate Ring 1 using Ring 0 as reference for consistency
-    console.log("Generating Ring 1 (elevated, using Ring 0 as reference)...");
-    pitch30Url = await generateRing1(pitch0Url);
+    // Orbital mode: generate second ring for pitch blending
+    pitch30Url = await generateRing(30);
   } else {
-    // Turnstile mode: reuse Ring 0 (single axis, no pitch variation)
+    // Turnstile mode: reuse pitch0 as pitch30 (single axis, no pitch variation)
     pitch30Url = pitch0Url;
   }
 
