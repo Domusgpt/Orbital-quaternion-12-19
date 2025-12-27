@@ -68,24 +68,7 @@ export class OrbitalShaderManager {
       //
       // Angular order: N→NNE→NE→ENE→E→ESE→SE→SSE→S→SSW→SW→WSW→W→WNW→NW→NNW
       // Which maps to frame indices: 0,9,5,13,2,14,6,10,1,11,7,15,3,12,4,8
-      const float ANGULAR_SEQ[16] = float[16](
-        0.0,  // Angle 0:  N     (0°)
-        9.0,  // Angle 1:  NNE   (22.5°)
-        5.0,  // Angle 2:  NE    (45°)
-        13.0, // Angle 3:  ENE   (67.5°)
-        2.0,  // Angle 4:  E     (90°)
-        14.0, // Angle 5:  ESE   (112.5°)
-        6.0,  // Angle 6:  SE    (135°)
-        10.0, // Angle 7:  SSE   (157.5°)
-        1.0,  // Angle 8:  S     (180°)
-        11.0, // Angle 9:  SSW   (202.5°)
-        7.0,  // Angle 10: SW    (225°)
-        15.0, // Angle 11: WSW   (247.5°)
-        3.0,  // Angle 12: W     (270°)
-        12.0, // Angle 13: WNW   (292.5°)
-        4.0,  // Angle 14: NW    (315°)
-        8.0   // Angle 15: NNW   (337.5°)
-      );
+      // NOTE: Array initialization removed for WebGL1 compatibility - using getAngularFrame() instead
 
       const float PI = 3.14159265359;
       const float TWO_PI = 6.28318530718;
