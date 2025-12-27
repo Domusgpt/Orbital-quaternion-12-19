@@ -2,8 +2,8 @@ import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
 import { QUADRANT_GRID, ANGULAR_LABELS } from "../core/QuadrantFrameMap";
 
 export type OrbitalGridResult = {
-  pitch0Url: string;
-  pitch30Url: string;
+  sheet0Url: string;  // Base angles: 0°, 22.5°, 45°, ...
+  sheet1Url: string;  // Offset angles: 11.25°, 33.75°, 56.25°, ... (for 32-frame fluidity)
 };
 
 /**
@@ -32,32 +32,28 @@ export const generateOrbitalAssets = async (
   const frontData = frontImageBase64.split(",")[1];
   const backData = backImageBase64.split(",")[1];
 
-  // Build the quadrant grid description from our mapping
-  const buildQuadrantDescription = (): string => {
+  // Build the quadrant grid description - base angles (0°, 22.5°, 45°, ...)
+  const buildQuadrantDescriptionBase = (): string => {
     const rows: string[] = [];
 
-    // Row 0: Cardinals
     rows.push(`ROW 1 (Cardinals - Primary views, 90° apart):
   Col 0: NORTH (0°) - Direct front view, facing camera
   Col 1: SOUTH (180°) - Direct back view, back to camera
   Col 2: EAST (90°) - Right profile, 90° clockwise from front
   Col 3: WEST (270°) - Left profile, 90° counter-clockwise from front`);
 
-    // Row 1: Intercardinals
     rows.push(`ROW 2 (Intercardinals - 3/4 views, 45° from cardinals):
   Col 0: NORTHWEST (315°) - 3/4 front-left view
   Col 1: NORTHEAST (45°) - 3/4 front-right view
   Col 2: SOUTHEAST (135°) - 3/4 back-right view
   Col 3: SOUTHWEST (225°) - 3/4 back-left view`);
 
-    // Row 2: Fine N/S
     rows.push(`ROW 3 (Fine North/South - 22.5° precision):
   Col 0: NORTH-NORTHWEST (337.5°) - Slight left from front
   Col 1: NORTH-NORTHEAST (22.5°) - Slight right from front
   Col 2: SOUTH-SOUTHEAST (157.5°) - Slight right from back
   Col 3: SOUTH-SOUTHWEST (202.5°) - Slight left from back`);
 
-    // Row 3: Fine E/W
     rows.push(`ROW 4 (Fine East/West - 22.5° precision):
   Col 0: WEST-NORTHWEST (292.5°) - Between left profile and 3/4 front-left
   Col 1: EAST-NORTHEAST (67.5°) - Between 3/4 front-right and right profile
@@ -67,7 +63,38 @@ export const generateOrbitalAssets = async (
     return rows.join('\n\n');
   };
 
-  const QUADRANT_PROMPT = `
+  // Build offset angle grid (+11.25° from base for 32-frame interleaving)
+  const buildQuadrantDescriptionOffset = (): string => {
+    const rows: string[] = [];
+
+    rows.push(`ROW 1 (Offset Cardinals - 11.25° offset from base):
+  Col 0: 11.25° - Between front and NNE
+  Col 1: 191.25° - Between back and SSW
+  Col 2: 101.25° - Between right profile and ESE
+  Col 3: 281.25° - Between left profile and WNW`);
+
+    rows.push(`ROW 2 (Offset Intercardinals - 11.25° offset):
+  Col 0: 326.25° - Between NW and NNW
+  Col 1: 56.25° - Between NE and ENE
+  Col 2: 146.25° - Between SE and SSE
+  Col 3: 236.25° - Between SW and WSW`);
+
+    rows.push(`ROW 3 (Offset Fine N/S - 11.25° offset):
+  Col 0: 348.75° - Between NNW and N
+  Col 1: 33.75° - Between NNE and NE
+  Col 2: 168.75° - Between SSE and S
+  Col 3: 213.75° - Between SSW and SW`);
+
+    rows.push(`ROW 4 (Offset Fine E/W - 11.25° offset):
+  Col 0: 303.75° - Between WNW and NW
+  Col 1: 78.75° - Between ENE and E
+  Col 2: 123.75° - Between ESE and SE
+  Col 3: 258.75° - Between WSW and W`);
+
+    return rows.join('\n\n');
+  };
+
+  const buildBasePrompt = () => `
 TASK: Generate a "Compass Quadrant Sprite Sheet" for "${productName}".
 SYSTEM ARCHITECTURE: 16-Point Compass Orbital System.
 
@@ -79,7 +106,7 @@ MECHANICAL GRID MANIFEST:
 - Scale: 75% VOLUMETRIC SCALE (Object fills 75% of cell height/width).
 
 COMPASS QUADRANT LAYOUT:
-${buildQuadrantDescription()}
+${buildQuadrantDescriptionBase()}
 
 CRITICAL GENERATION RULES:
 
@@ -100,7 +127,7 @@ CRITICAL GENERATION RULES:
 
 4. TECHNICAL REQUIREMENTS:
    - NO BORDERS: No grid lines or text labels
-   - CAMERA LOCK: Fixed height, fixed focal length
+   - CAMERA LOCK: Fixed height, fixed focal length, EYE-LEVEL (pitch 0°)
    - PURE WHITE BACKGROUND: #FFFFFF exactly
    - SEAMLESS EDGES: No artifacts at cell boundaries
 
@@ -112,19 +139,51 @@ CRITICAL GENERATION RULES:
    - W (270°): 270° clockwise = left side visible
   `;
 
-  const generateRing = async (pitchAngle: number): Promise<string> => {
-    const angleSpecificPrompt = `
-      ${QUADRANT_PROMPT}
+  const buildOffsetPrompt = () => `
+TASK: Generate an "Offset Angle Sprite Sheet" for "${productName}".
+SYSTEM ARCHITECTURE: 16-Point OFFSET Angles (+11.25° from standard compass).
 
-      CAMERA PITCH CONFIGURATION:
-      - Pitch Angle: ${pitchAngle}° (degrees down from horizontal)
-      ${pitchAngle === 0
-        ? '- Context: EYE-LEVEL view ring - camera at object horizon'
-        : '- Context: ELEVATED view ring - camera looking down at object'}
-      ${pitchAngle === 30
-        ? '- Note: All 16 compass directions maintain their horizontal rotation, only vertical camera angle changes'
-        : ''}
-    `;
+MECHANICAL GRID MANIFEST:
+- Structure: 4x4 Grid (16 total cells).
+- Resolution: 1024x1024 (Overall), 256x256 (Per Cell).
+- Background: Solid Pure White (#FFFFFF).
+- Alignment: CENTROID ALIGNMENT (Object centered perfectly in each cell).
+- Scale: 75% VOLUMETRIC SCALE (Object fills 75% of cell height/width).
+
+OFFSET ANGLE LAYOUT (each angle is 11.25° AFTER the standard compass direction):
+${buildQuadrantDescriptionOffset()}
+
+CRITICAL GENERATION RULES:
+
+1. OFFSET PURPOSE:
+   - These frames fill the gaps between standard compass directions
+   - Combined with base sheet, creates 32 total angles (11.25° apart)
+   - Each frame is exactly halfway between two standard compass points
+
+2. ANGULAR PRECISION:
+   - Each frame MUST represent its EXACT offset angle
+   - 11.25° is a small rotation - frames should look very similar to adjacent base frames
+   - Smooth progression between all 32 combined angles
+
+3. OBJECT IDENTITY:
+   - Product must be 100% identical to base sheet
+   - Same scale, same lighting, same detail level
+   - ONLY viewing angle differs
+
+4. TECHNICAL REQUIREMENTS:
+   - NO BORDERS: No grid lines or text labels
+   - CAMERA LOCK: Fixed height, fixed focal length, EYE-LEVEL (pitch 0°)
+   - PURE WHITE BACKGROUND: #FFFFFF exactly
+   - MATCH BASE SHEET: Same object appearance, just rotated 11.25° from base positions
+
+5. ROTATION REFERENCE:
+   - All angles are 11.25° clockwise from standard compass
+   - 11.25° = halfway between N(0°) and NNE(22.5°)
+   - Angles increase CLOCKWISE when viewed from above
+  `;
+
+  const generateSheet = async (isOffset: boolean): Promise<string> => {
+    const prompt = isOffset ? buildOffsetPrompt() : buildBasePrompt();
 
     const response: GenerateContentResponse = await ai.models.generateContent({
       model: "gemini-3-pro-image-preview",
@@ -132,7 +191,7 @@ CRITICAL GENERATION RULES:
         parts: [
           { inlineData: { data: frontData, mimeType: "image/png" } },
           { inlineData: { data: backData, mimeType: "image/png" } },
-          { text: angleSpecificPrompt }
+          { text: prompt }
         ]
       },
       config: {
@@ -151,18 +210,18 @@ CRITICAL GENERATION RULES:
     }
 
     if (!imageUrl) {
-      throw new Error(`Failed to generate ring at ${pitchAngle}°`);
+      throw new Error(`Failed to generate ${isOffset ? 'offset' : 'base'} sheet`);
     }
 
     return imageUrl;
   };
 
-  const [pitch0Url, pitch30Url] = await Promise.all([
-    generateRing(0),
-    generateRing(30)
+  const [sheet0Url, sheet1Url] = await Promise.all([
+    generateSheet(false),  // Base angles
+    generateSheet(true)    // Offset angles (+11.25°)
   ]);
 
-  return { pitch0Url, pitch30Url };
+  return { sheet0Url, sheet1Url };
 };
 
 /**

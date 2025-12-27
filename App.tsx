@@ -344,8 +344,8 @@ const App: React.FC = () => {
                  ) : activeGolem.orbitalAssets ? (
                    <div className="w-full h-full max-w-4xl flex items-center justify-center">
                       <OrbitalMode
-                        ring0Url={activeGolem.orbitalAssets.pitch0Url}
-                        ring1Url={activeGolem.orbitalAssets.pitch30Url}
+                        ring0Url={activeGolem.orbitalAssets.sheet0Url}
+                        ring1Url={activeGolem.orbitalAssets.sheet1Url}
                         productName={activeGolem.productName}
                       />
                    </div>

@@ -49,8 +49,10 @@ export class OrbitalShaderManager {
       const float TWO_PI = 6.28318530718;
       const float GRID_COLS = 4.0;
       const float GRID_ROWS = 4.0;
-      const float TOTAL_FRAMES = 16.0;
-      const float DEGREES_PER_FRAME = 22.5;
+      const float FRAMES_PER_SHEET = 16.0;
+      const float TOTAL_FRAMES_32 = 32.0;
+      const float DEGREES_PER_FRAME_16 = 22.5;  // For 16-frame mode
+      const float DEGREES_PER_FRAME_32 = 11.25; // For 32-frame mode (interleaved)
 
       /**
        * Angular sequence lookup: maps angle index (0-15) to frame index in quadrant grid
@@ -145,52 +147,70 @@ export class OrbitalShaderManager {
         float yawDeg = u_yaw * 57.2957795131; // 180/PI
         yawDeg = mod(yawDeg + 360.0, 360.0);
 
-        // Calculate which frames to blend (always 16 frames, 22.5° each)
-        float angleFloat = yawDeg / DEGREES_PER_FRAME;
-        int angleIndexA = int(floor(angleFloat));
-        int angleIndexB = int(mod(float(angleIndexA + 1), TOTAL_FRAMES));
-
-        // Get actual frame indices from quadrant layout
-        float frameA = getFrameIndex(angleIndexA);
-        float frameB = getFrameIndex(angleIndexB);
-
-        // Calculate blend factor with smooth interpolation
-        float rawBlend = fract(angleFloat);
-        float blend = smootherBlend(rawBlend);
-
-        // Velocity-based motion enhancement (subtle - velocity is now capped at ±2)
+        // Velocity-based motion enhancement
         float absVelocity = abs(u_velocity);
-        float motionBlur = absVelocity * 0.05; // Very subtle motion blur
-
-        // Minimal velocity bias for responsiveness
-        float velocityBias = 0.0;
-        if (absVelocity > 1.0) {
-          velocityBias = sign(u_velocity) * min(absVelocity * 0.02, 0.1);
-        }
-        blend = clamp(blend + velocityBias, 0.0, 1.0);
-
-        // Sample frames with motion blur
-        vec4 colorA = sampleFrameBlurred(u_textureRing0, frameA, v_uv, motionBlur);
-        vec4 colorB = sampleFrameBlurred(u_textureRing0, frameB, v_uv, motionBlur);
-
-        // Smooth cross-fade between frames
-        vec4 color0 = mix(colorA, colorB, blend);
+        float motionBlur = absVelocity * 0.05;
 
         vec4 finalColor;
 
         if (u_renderMode < 0.5) {
-          // ORBITAL MODE: Blend with pitch ring for vertical angle
+          // ORBITAL MODE: 16 frames per sheet, pitch blending between sheets
+          float angleFloat = yawDeg / DEGREES_PER_FRAME_16;
+          int angleIndexA = int(floor(angleFloat));
+          int angleIndexB = int(mod(float(angleIndexA + 1), FRAMES_PER_SHEET));
+
+          float frameA = getFrameIndex(angleIndexA);
+          float frameB = getFrameIndex(angleIndexB);
+
+          float rawBlend = fract(angleFloat);
+          float blend = smootherBlend(rawBlend);
+
+          // Sample from both sheets
+          vec4 color0A = sampleFrameBlurred(u_textureRing0, frameA, v_uv, motionBlur);
+          vec4 color0B = sampleFrameBlurred(u_textureRing0, frameB, v_uv, motionBlur);
+          vec4 color0 = mix(color0A, color0B, blend);
+
           vec4 color1A = sampleFrameBlurred(u_textureRing1, frameA, v_uv, motionBlur);
           vec4 color1B = sampleFrameBlurred(u_textureRing1, frameB, v_uv, motionBlur);
           vec4 color1 = mix(color1A, color1B, blend);
 
-          // Smooth pitch blending (0-30° range)
+          // Pitch blending (0-30° range)
           float pitchNorm = clamp(u_pitch / 30.0, 0.0, 1.0);
           float pitchBlend = smoothBlend(pitchNorm);
           finalColor = mix(color0, color1, pitchBlend);
+
         } else {
-          // TURNSTILE MODE: Single axis, no pitch blending
-          finalColor = color0;
+          // TURNSTILE MODE: 32 frames total (interleaved from both sheets)
+          // Sheet 0: frames at 0°, 22.5°, 45°, ... (even indices)
+          // Sheet 1: frames at 11.25°, 33.75°, ... (odd indices, offset by 11.25°)
+          float angleFloat32 = yawDeg / DEGREES_PER_FRAME_32;
+          int globalIndex = int(floor(angleFloat32));
+          int nextIndex = int(mod(float(globalIndex + 1), TOTAL_FRAMES_32));
+
+          // Determine which sheet each frame comes from (even=sheet0, odd=sheet1)
+          bool frameAFromSheet1 = mod(float(globalIndex), 2.0) > 0.5;
+          bool frameBFromSheet1 = mod(float(nextIndex), 2.0) > 0.5;
+
+          // Convert global 32-index to local 16-index for each sheet
+          int localIndexA = globalIndex / 2;
+          int localIndexB = nextIndex / 2;
+
+          float frameA = getFrameIndex(localIndexA);
+          float frameB = getFrameIndex(localIndexB);
+
+          float rawBlend = fract(angleFloat32);
+          float blend = smootherBlend(rawBlend);
+
+          // Sample from appropriate sheets
+          vec4 colorA = frameAFromSheet1
+            ? sampleFrameBlurred(u_textureRing1, frameA, v_uv, motionBlur)
+            : sampleFrameBlurred(u_textureRing0, frameA, v_uv, motionBlur);
+
+          vec4 colorB = frameBFromSheet1
+            ? sampleFrameBlurred(u_textureRing1, frameB, v_uv, motionBlur)
+            : sampleFrameBlurred(u_textureRing0, frameB, v_uv, motionBlur);
+
+          finalColor = mix(colorA, colorB, blend);
         }
 
         // Alpha handling for white backgrounds

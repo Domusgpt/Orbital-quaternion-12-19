@@ -35,8 +35,8 @@ export interface BatchItem {
   progress: number;
   resultUrl?: string;
   orbitalAssets?: {
-    pitch0Url: string;
-    pitch30Url: string;
+    sheet0Url: string;  // Base angles (0°, 22.5°, 45°, ...)
+    sheet1Url: string;  // Offset angles (11.25°, 33.75°, ...)
   };
   error?: string;
   images: ImageState;

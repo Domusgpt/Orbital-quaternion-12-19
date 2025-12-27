@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Test Sprite Sheet Generator</title>
+  <style>
+    body { font-family: monospace; background: #1a1a1a; color: #fff; padding: 20px; }
+    canvas { border: 1px solid #444; margin: 10px 0; }
+    button { padding: 10px 20px; margin: 5px; cursor: pointer; }
+    .info { background: #333; padding: 10px; margin: 10px 0; }
+  </style>
+</head>
+<body>
+  <h1>Quadrant Test Sprite Sheet Generator</h1>
+
+  <div class="info">
+    <strong>Grid Layout (Quadrant System):</strong><br>
+    Row 0: N(0°), S(180°), E(90°), W(270°) - Cardinals<br>
+    Row 1: NW(315°), NE(45°), SE(135°), SW(225°) - Intercardinals<br>
+    Row 2: NNW(337.5°), NNE(22.5°), SSE(157.5°), SSW(202.5°) - Fine N/S<br>
+    Row 3: WNW(292.5°), ENE(67.5°), ESE(112.5°), WSW(247.5°) - Fine E/W
+  </div>
+
+  <div>
+    <button onclick="generateSheet('ring0')">Generate Ring 0 (Pitch 0°)</button>
+    <button onclick="generateSheet('ring1')">Generate Ring 1 (Pitch 30°)</button>
+    <button onclick="downloadSheet('ring0')">Download Ring 0</button>
+    <button onclick="downloadSheet('ring1')">Download Ring 1</button>
+  </div>
+
+  <h3>Ring 0 (Pitch 0° - Eye Level)</h3>
+  <canvas id="ring0" width="1024" height="1024"></canvas>
+
+  <h3>Ring 1 (Pitch 30° - Elevated)</h3>
+  <canvas id="ring1" width="1024" height="1024"></canvas>
+
+  <script>
+    const GRID = [
+      // Row 0: Cardinals
+      { idx: 0, dir: 'N', angle: 0, row: 0, col: 0 },
+      { idx: 1, dir: 'S', angle: 180, row: 0, col: 1 },
+      { idx: 2, dir: 'E', angle: 90, row: 0, col: 2 },
+      { idx: 3, dir: 'W', angle: 270, row: 0, col: 3 },
+      // Row 1: Intercardinals
+      { idx: 4, dir: 'NW', angle: 315, row: 1, col: 0 },
+      { idx: 5, dir: 'NE', angle: 45, row: 1, col: 1 },
+      { idx: 6, dir: 'SE', angle: 135, row: 1, col: 2 },
+      { idx: 7, dir: 'SW', angle: 225, row: 1, col: 3 },
+      // Row 2: Fine N/S
+      { idx: 8, dir: 'NNW', angle: 337.5, row: 2, col: 0 },
+      { idx: 9, dir: 'NNE', angle: 22.5, row: 2, col: 1 },
+      { idx: 10, dir: 'SSE', angle: 157.5, row: 2, col: 2 },
+      { idx: 11, dir: 'SSW', angle: 202.5, row: 2, col: 3 },
+      // Row 3: Fine E/W
+      { idx: 12, dir: 'WNW', angle: 292.5, row: 3, col: 0 },
+      { idx: 13, dir: 'ENE', angle: 67.5, row: 3, col: 1 },
+      { idx: 14, dir: 'ESE', angle: 112.5, row: 3, col: 2 },
+      { idx: 15, dir: 'WSW', angle: 247.5, row: 3, col: 3 },
+    ];
+
+    // Angular sequence for stitching verification
+    const ANGULAR_ORDER = [0, 9, 5, 13, 2, 14, 6, 10, 1, 11, 7, 15, 3, 12, 4, 8];
+
+    // Colors for each frame (distinct for easy identification)
+    const COLORS = [
+      '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4',
+      '#FFEAA7', '#DDA0DD', '#98D8C8', '#F7DC6F',
+      '#BB8FCE', '#85C1E9', '#F8B500', '#00CED1',
+      '#FF69B4', '#32CD32', '#FFD700', '#8B4513'
+    ];
+
+    function generateSheet(canvasId) {
+      const canvas = document.getElementById(canvasId);
+      const ctx = canvas.getContext('2d');
+      const cellSize = 256;
+      const isRing1 = canvasId === 'ring1';
+      const pitchLabel = isRing1 ? 'P30°' : 'P0°';
+
+      // White background
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(0, 0, 1024, 1024);
+
+      GRID.forEach((frame, i) => {
+        const x = frame.col * cellSize;
+        const y = frame.row * cellSize;
+
+        // Cell background color
+        ctx.fillStyle = COLORS[i];
+        ctx.fillRect(x + 2, y + 2, cellSize - 4, cellSize - 4);
+
+        // Draw direction arrow to show angle
+        ctx.save();
+        ctx.translate(x + cellSize/2, y + cellSize/2);
+
+        // Rotate arrow to point in the direction
+        const arrowAngle = (frame.angle - 90) * Math.PI / 180; // -90 because 0° is up
+        ctx.rotate(arrowAngle);
+
+        // Draw arrow
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(0, 40);
+        ctx.lineTo(0, -40);
+        ctx.lineTo(-15, -25);
+        ctx.moveTo(0, -40);
+        ctx.lineTo(15, -25);
+        ctx.stroke();
+
+        ctx.restore();
+
+        // Text labels
+        ctx.fillStyle = '#000';
+        ctx.font = 'bold 24px monospace';
+        ctx.textAlign = 'center';
+
+        // Frame index
+        ctx.fillText(`F${frame.idx}`, x + cellSize/2, y + 30);
+
+        // Direction
+        ctx.font = 'bold 32px monospace';
+        ctx.fillText(frame.dir, x + cellSize/2, y + cellSize/2 + 60);
+
+        // Angle
+        ctx.font = '20px monospace';
+        ctx.fillText(`${frame.angle}°`, x + cellSize/2, y + cellSize/2 + 85);
+
+        // Pitch indicator
+        ctx.font = 'bold 18px monospace';
+        ctx.fillStyle = isRing1 ? '#0066CC' : '#006600';
+        ctx.fillText(pitchLabel, x + cellSize/2, y + cellSize - 15);
+
+        // Angular sequence number (small, top-right)
+        const seqIdx = ANGULAR_ORDER.indexOf(frame.idx);
+        ctx.font = '14px monospace';
+        ctx.fillStyle = '#666';
+        ctx.textAlign = 'right';
+        ctx.fillText(`seq:${seqIdx}`, x + cellSize - 10, y + 20);
+      });
+
+      // Draw grid lines
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 2;
+      for (let i = 0; i <= 4; i++) {
+        ctx.beginPath();
+        ctx.moveTo(i * cellSize, 0);
+        ctx.lineTo(i * cellSize, 1024);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(0, i * cellSize);
+        ctx.lineTo(1024, i * cellSize);
+        ctx.stroke();
+      }
+    }
+
+    function downloadSheet(canvasId) {
+      const canvas = document.getElementById(canvasId);
+      const link = document.createElement('a');
+      link.download = `test-sprite-${canvasId}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    }
+
+    // Generate both on load
+    generateSheet('ring0');
+    generateSheet('ring1');
+  </script>
+</body>
+</html>
