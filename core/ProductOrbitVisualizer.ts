@@ -178,30 +178,32 @@ export class ProductOrbitVisualizer {
   updateFromRotor(quaternion: Quaternion, dt: number) {
     const { axis, angle } = toAxisAngle(quaternion);
 
+    // Yaw from Y-axis rotation (horizontal spin)
     const yEnergy = axis[1] * angle;
+    // Pitch from X-axis rotation (vertical tilt)
     const xEnergy = axis[0] * angle;
 
-    this.currentYaw += yEnergy * 0.1;
+    // Apply yaw - scale factor controls responsiveness
+    this.currentYaw += yEnergy * 0.05; // Reduced from 0.1
 
+    // Normalize yaw to [0, 2π]
     const fullTurn = Math.PI * 2;
     this.currentYaw = ((this.currentYaw % fullTurn) + fullTurn) % fullTurn;
 
     // Pitch only changes in orbital mode
     if (this.renderMode === 'orbital') {
-      this.currentPitch += xEnergy * 5.0;
+      this.currentPitch += xEnergy * 2.0; // Reduced from 5.0
       this.currentPitch = Math.max(0, Math.min(30, this.currentPitch));
     } else {
-      // Turnstile mode: single axis, no pitch
       this.currentPitch = 0;
     }
 
-    // Calculate velocity with proper clamping to prevent extreme values
-    const velocityScale = dt > 0 ? 1 / dt : 1;
-    const instantaneousVelocity = yEnergy * velocityScale;
-    // Smooth velocity with stronger damping
-    this.velocity = this.velocity * 0.9 + instantaneousVelocity * 0.1;
-    // CLAMP velocity to sane bounds to prevent spaghetti distortion
-    this.velocity = Math.max(-3, Math.min(3, this.velocity));
+    // Smooth velocity tracking for motion effects
+    // dt is in seconds, yEnergy is radians of change
+    const instantVel = dt > 0 ? yEnergy / dt : 0;
+    this.velocity = this.velocity * 0.8 + instantVel * 0.2;
+    // Cap velocity to reasonable bounds
+    this.velocity = Math.max(-2, Math.min(2, this.velocity));
   }
 
   render() {
@@ -216,8 +218,8 @@ export class ProductOrbitVisualizer {
 
     // Disable warp effect entirely for stable display
     const warpFactor = 0;
-    // Clamp velocity for shader (already clamped but be safe)
-    const clampedVelocity = Math.max(-3, Math.min(3, this.velocity));
+    // Velocity already capped at ±2 in updateFromRotor
+    const clampedVelocity = this.velocity;
 
     this.gl.uniform1f(this.uniforms.yaw, this.currentYaw);
     this.gl.uniform1f(this.uniforms.pitch, this.currentPitch);

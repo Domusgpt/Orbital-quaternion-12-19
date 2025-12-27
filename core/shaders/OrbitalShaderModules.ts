@@ -85,14 +85,20 @@ export class OrbitalShaderManager {
 
       /**
        * Sample a frame from the 4x4 quadrant grid
+       * Grid layout: row 0 at top of texture, row 3 at bottom
        */
       vec4 sampleFrame(sampler2D tex, float frameIndex, vec2 uv) {
         float col = mod(frameIndex, GRID_COLS);
         float row = floor(frameIndex / GRID_COLS);
 
+        // UV mapping:
+        // - col maps to X: (col + uv.x) / 4
+        // - row maps to Y: row 0 = top of texture (Y near 0)
+        // - uv.y=0 is display bottom, uv.y=1 is display top
+        // - For right-side-up: display top should sample texture top of cell
         vec2 frameUV = vec2(
           (col + uv.x) / GRID_COLS,
-          1.0 - ((row + (1.0 - uv.y)) / GRID_ROWS)
+          (row + (1.0 - uv.y)) / GRID_ROWS
         );
 
         return texture2D(tex, frameUV);
@@ -152,14 +158,14 @@ export class OrbitalShaderManager {
         float rawBlend = fract(angleFloat);
         float blend = smootherBlend(rawBlend);
 
-        // Velocity-based motion enhancement
+        // Velocity-based motion enhancement (subtle - velocity is now capped at ±2)
         float absVelocity = abs(u_velocity);
-        float motionBlur = absVelocity * 0.5; // Motion blur amount
+        float motionBlur = absVelocity * 0.05; // Very subtle motion blur
 
-        // When spinning fast, bias blend toward direction of motion
+        // Minimal velocity bias for responsiveness
         float velocityBias = 0.0;
-        if (absVelocity > 0.5) {
-          velocityBias = sign(u_velocity) * min(absVelocity * 0.1, 0.2);
+        if (absVelocity > 1.0) {
+          velocityBias = sign(u_velocity) * min(absVelocity * 0.02, 0.1);
         }
         blend = clamp(blend + velocityBias, 0.0, 1.0);
 

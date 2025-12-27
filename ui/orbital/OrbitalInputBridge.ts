@@ -20,9 +20,9 @@ export class OrbitalInputBridge {
   private velocity = 0;
   private frameId: number | null = null;
 
-  private readonly yawSensitivity = 0.006;
-  private readonly pitchSensitivity = 0.15;
-  private readonly friction = 0.94;
+  private readonly yawSensitivity = 0.003;   // Reduced from 0.006 - was 2x too sensitive
+  private readonly pitchSensitivity = 0.08;  // Reduced from 0.15
+  private readonly friction = 0.85;          // Increased damping from 0.94 (stops faster)
 
   constructor(element: HTMLElement, onUpdate: (data: OrbitalInputUpdate) => void) {
     this.element = element;
@@ -76,7 +76,9 @@ export class OrbitalInputBridge {
     this.yaw += deltaX * this.yawSensitivity;
     this.pitch = Math.min(30, Math.max(0, this.pitch - deltaY * this.pitchSensitivity));
 
-    this.velocity = (deltaX * this.yawSensitivity) / (deltaTime / 1000);
+    // Calculate velocity in radians/second, but cap it to prevent insane spin
+    const rawVelocity = (deltaX * this.yawSensitivity) / (deltaTime / 1000);
+    this.velocity = Math.max(-2, Math.min(2, rawVelocity)); // Cap at ±2 rad/s
 
     this.lastPointerX = event.clientX;
     this.lastPointerY = event.clientY;
