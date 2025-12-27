@@ -50,6 +50,8 @@ jobs:
           # Prevent secrets from being baked into the static bundle; runtime key entry is handled client-side.
           VITE_GEMINI_API_KEY: ""
           GEMINI_API_KEY: ""
+          # Pass repo name for GitHub Pages base path
+          GITHUB_REPOSITORY: ${{ github.repository }}
         run: npm run build
 
       - name: Upload artifact
