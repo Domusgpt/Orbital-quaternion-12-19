@@ -1,9 +1,24 @@
 import { OrbitalShaderManager } from "./shaders/OrbitalShaderModules";
 import { Quaternion, toAxisAngle } from "./quaternion";
+import { getBlendFrames, getCompassDirection, ANGULAR_SEQUENCE } from "./QuadrantFrameMap";
 
 export type OrbitalTextures = {
   ring0: HTMLImageElement;
   ring1: HTMLImageElement;
+};
+
+export type DebugInfo = {
+  yawRad: number;
+  yawDeg: number;
+  pitch: number;
+  velocity: number;
+  warpFactor: number;
+  frameA: number;
+  frameB: number;
+  blendFactor: number;
+  compassDirection: string;
+  webglVersion: string;
+  textureSize: { ring0: string; ring1: string };
 };
 
 export class ProductOrbitVisualizer {
@@ -14,6 +29,7 @@ export class ProductOrbitVisualizer {
   private shaderManager: OrbitalShaderManager | null = null;
   private buffer: WebGLBuffer | null = null;
   private supported = false;
+  private webglVersion = "none";
   private uniforms: {
     yaw: WebGLUniformLocation | null;
     pitch: WebGLUniformLocation | null;
@@ -38,10 +54,20 @@ export class ProductOrbitVisualizer {
   }
 
   private initWebGL() {
-    this.gl =
-      this.canvas.getContext("webgl2") || this.canvas.getContext("webgl");
+    const gl2 = this.canvas.getContext("webgl2");
+    if (gl2) {
+      this.gl = gl2;
+      this.webglVersion = "WebGL2";
+    } else {
+      const gl1 = this.canvas.getContext("webgl");
+      if (gl1) {
+        this.gl = gl1;
+        this.webglVersion = "WebGL1";
+      }
+    }
 
     if (!this.gl) {
+      this.webglVersion = "none";
       return;
     }
 
@@ -173,5 +199,38 @@ export class ProductOrbitVisualizer {
     this.gl.vertexAttribPointer(posLoc, 2, this.gl.FLOAT, false, 0, 0);
 
     this.gl.drawArrays(this.gl.TRIANGLE_STRIP, 0, 4);
+  }
+
+  /**
+   * Get current debug information for the debug panel
+   */
+  getDebugInfo(): DebugInfo {
+    const yawDeg = (this.currentYaw * 180) / Math.PI;
+    const { frameA, frameB, blend } = getBlendFrames(yawDeg);
+    const warpFactor = Math.min(0.35, 0.08 + Math.abs(this.velocity) * 0.05);
+
+    return {
+      yawRad: this.currentYaw,
+      yawDeg: yawDeg,
+      pitch: this.currentPitch,
+      velocity: this.velocity,
+      warpFactor,
+      frameA,
+      frameB,
+      blendFactor: blend,
+      compassDirection: getCompassDirection(yawDeg),
+      webglVersion: this.webglVersion,
+      textureSize: {
+        ring0: `${this.textures.ring0.width}x${this.textures.ring0.height}`,
+        ring1: `${this.textures.ring1.width}x${this.textures.ring1.height}`,
+      },
+    };
+  }
+
+  /**
+   * Get the texture images for debug display
+   */
+  getTextures(): OrbitalTextures {
+    return this.textures;
   }
 }
