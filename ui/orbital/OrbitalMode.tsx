@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import { ProductOrbitVisualizer, DebugInfo } from "../../core/ProductOrbitVisualizer";
+import { ProductOrbitVisualizer, DebugInfo, RenderMode } from "../../core/ProductOrbitVisualizer";
 import { OrbitalInputBridge } from "./OrbitalInputBridge";
 import { ANGULAR_SEQUENCE, QUADRANT_GRID } from "../../core/QuadrantFrameMap";
 
@@ -38,6 +38,9 @@ const OrbitalMode: React.FC<OrbitalModeProps> = ({ ring0Url, ring1Url, productNa
   const [touchLogs, setTouchLogs] = useState<TouchLog[]>([]);
   const [showSpriteSheets, setShowSpriteSheets] = useState(false);
 
+  // Render mode state
+  const [renderMode, setRenderMode] = useState<RenderMode>('orbital');
+
   const assets = useMemo(() => ({ ring0Url, ring1Url }), [ring0Url, ring1Url]);
 
   // Log touch events
@@ -48,6 +51,15 @@ const OrbitalMode: React.FC<OrbitalModeProps> = ({ ring0Url, ring1Url, productNa
       ...prev.slice(0, 19) // Keep last 20
     ]);
   }, [debugMode]);
+
+  // Toggle render mode
+  const toggleRenderMode = useCallback(() => {
+    const newMode: RenderMode = renderMode === 'orbital' ? 'turnstile' : 'orbital';
+    setRenderMode(newMode);
+    if (visualizerRef.current) {
+      visualizerRef.current.setRenderMode(newMode);
+    }
+  }, [renderMode]);
 
   useEffect(() => {
     let isMounted = true;
@@ -152,17 +164,29 @@ const OrbitalMode: React.FC<OrbitalModeProps> = ({ ring0Url, ring1Url, productNa
 
   return (
     <div className="relative w-full h-full flex items-center justify-center">
-      {/* Debug Toggle Button */}
-      <button
-        onClick={() => setDebugMode(!debugMode)}
-        className={`absolute top-6 right-6 z-20 px-3 py-2 rounded-lg text-[9px] font-bold uppercase tracking-widest transition-all ${
-          debugMode
-            ? 'bg-green-600 text-white border border-green-400'
-            : 'bg-black/60 text-white/60 border border-white/10 hover:bg-black/80'
-        }`}
-      >
-        {debugMode ? 'DEBUG_ON' : 'DEBUG'}
-      </button>
+      {/* Mode & Debug Toggle Buttons */}
+      <div className="absolute top-6 right-6 z-20 flex gap-2">
+        <button
+          onClick={toggleRenderMode}
+          className={`px-3 py-2 rounded-lg text-[9px] font-bold uppercase tracking-widest transition-all ${
+            renderMode === 'orbital'
+              ? 'bg-indigo-600 text-white border border-indigo-400'
+              : 'bg-amber-600 text-white border border-amber-400'
+          }`}
+        >
+          {renderMode === 'orbital' ? 'ORBITAL_16' : 'TURNSTILE_8'}
+        </button>
+        <button
+          onClick={() => setDebugMode(!debugMode)}
+          className={`px-3 py-2 rounded-lg text-[9px] font-bold uppercase tracking-widest transition-all ${
+            debugMode
+              ? 'bg-green-600 text-white border border-green-400'
+              : 'bg-black/60 text-white/60 border border-white/10 hover:bg-black/80'
+          }`}
+        >
+          {debugMode ? 'DEBUG_ON' : 'DEBUG'}
+        </button>
+      </div>
 
       {/* Labels */}
       <div className="absolute top-6 left-6 z-10 space-y-2">
@@ -177,7 +201,9 @@ const OrbitalMode: React.FC<OrbitalModeProps> = ({ ring0Url, ring1Url, productNa
       {/* Help text */}
       {!debugMode && (
         <div className="absolute bottom-6 right-6 z-10 px-4 py-2 rounded-lg bg-black/70 border border-white/10 text-[9px] font-bold uppercase tracking-[0.3em] text-white/70">
-          Drag to spin · Vertical drag for pitch
+          {renderMode === 'orbital'
+            ? 'Drag to spin · Vertical drag for pitch'
+            : 'Drag to spin (single axis)'}
         </div>
       )}
 
@@ -262,10 +288,16 @@ const OrbitalMode: React.FC<OrbitalModeProps> = ({ ring0Url, ring1Url, productNa
           </div>
 
           {/* System Info */}
-          <div className="grid grid-cols-2 gap-2 mb-4">
+          <div className="grid grid-cols-3 gap-2 mb-4">
             <div className="bg-white/5 rounded p-2">
               <div className="text-[8px] text-green-400 uppercase">WebGL</div>
               <div className="text-white text-sm">{debugInfo.webglVersion}</div>
+            </div>
+            <div className={`rounded p-2 ${debugInfo.renderMode === 'orbital' ? 'bg-indigo-900/30' : 'bg-amber-900/30'}`}>
+              <div className="text-[8px] text-green-400 uppercase">Render Mode</div>
+              <div className={`font-bold text-sm ${debugInfo.renderMode === 'orbital' ? 'text-indigo-300' : 'text-amber-300'}`}>
+                {debugInfo.renderMode === 'orbital' ? 'ORBITAL (16)' : 'TURNSTILE (8)'}
+              </div>
             </div>
             <div className="bg-white/5 rounded p-2">
               <div className="text-[8px] text-green-400 uppercase">Warp Factor</div>

@@ -7,6 +7,8 @@ export type OrbitalTextures = {
   ring1: HTMLImageElement;
 };
 
+export type RenderMode = 'orbital' | 'turnstile';
+
 export type DebugInfo = {
   yawRad: number;
   yawDeg: number;
@@ -19,6 +21,7 @@ export type DebugInfo = {
   compassDirection: string;
   webglVersion: string;
   textureSize: { ring0: string; ring1: string };
+  renderMode: RenderMode;
 };
 
 export class ProductOrbitVisualizer {
@@ -37,16 +40,33 @@ export class ProductOrbitVisualizer {
     warp: WebGLUniformLocation | null;
     textureRing0: WebGLUniformLocation | null;
     textureRing1: WebGLUniformLocation | null;
+    renderMode: WebGLUniformLocation | null;
   } | null = null;
 
   private currentYaw = 0;
   private currentPitch = 0;
   private velocity = 0;
+  private renderMode: RenderMode = 'orbital';
 
   constructor(canvas: HTMLCanvasElement, textures: OrbitalTextures) {
     this.canvas = canvas;
     this.textures = textures;
     this.initWebGL();
+  }
+
+  /**
+   * Set render mode: 'orbital' (16-frame 4x4) or 'turnstile' (8-frame 4x2)
+   */
+  setRenderMode(mode: RenderMode) {
+    this.renderMode = mode;
+    // Reset pitch to 0 in turnstile mode (single axis)
+    if (mode === 'turnstile') {
+      this.currentPitch = 0;
+    }
+  }
+
+  getRenderMode(): RenderMode {
+    return this.renderMode;
   }
 
   isSupported() {
@@ -98,7 +118,8 @@ export class ProductOrbitVisualizer {
       velocity: this.gl.getUniformLocation(this.program, "u_velocity"),
       warp: this.gl.getUniformLocation(this.program, "u_warpFactor"),
       textureRing0: this.gl.getUniformLocation(this.program, "u_textureRing0"),
-      textureRing1: this.gl.getUniformLocation(this.program, "u_textureRing1")
+      textureRing1: this.gl.getUniformLocation(this.program, "u_textureRing1"),
+      renderMode: this.gl.getUniformLocation(this.program, "u_renderMode")
     };
   }
 
@@ -165,8 +186,14 @@ export class ProductOrbitVisualizer {
     const fullTurn = Math.PI * 2;
     this.currentYaw = ((this.currentYaw % fullTurn) + fullTurn) % fullTurn;
 
-    this.currentPitch += xEnergy * 5.0;
-    this.currentPitch = Math.max(0, Math.min(30, this.currentPitch));
+    // Pitch only changes in orbital mode
+    if (this.renderMode === 'orbital') {
+      this.currentPitch += xEnergy * 5.0;
+      this.currentPitch = Math.max(0, Math.min(30, this.currentPitch));
+    } else {
+      // Turnstile mode: single axis, no pitch
+      this.currentPitch = 0;
+    }
 
     // Calculate velocity with proper clamping to prevent extreme values
     const velocityScale = dt > 0 ? 1 / dt : 1;
@@ -196,6 +223,7 @@ export class ProductOrbitVisualizer {
     this.gl.uniform1f(this.uniforms.pitch, this.currentPitch);
     this.gl.uniform1f(this.uniforms.velocity, clampedVelocity);
     this.gl.uniform1f(this.uniforms.warp, warpFactor);
+    this.gl.uniform1f(this.uniforms.renderMode, this.renderMode === 'orbital' ? 0.0 : 1.0);
 
     this.gl.uniform1i(this.uniforms.textureRing0, 0);
     this.gl.uniform1i(this.uniforms.textureRing1, 1);
@@ -232,6 +260,7 @@ export class ProductOrbitVisualizer {
         ring0: `${this.textures.ring0.width}x${this.textures.ring0.height}`,
         ring1: `${this.textures.ring1.width}x${this.textures.ring1.height}`,
       },
+      renderMode: this.renderMode,
     };
   }
 
