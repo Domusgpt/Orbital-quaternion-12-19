@@ -3,7 +3,7 @@ name: Deploy to GitHub Pages
 on:
   # Deploy on push to main
   push:
-    branches: [ main ]
+    branches: [ claude/refactor-quadrant-frames-YHO3q ]
 
   # Deploy on PR (for preview)
   pull_request:
