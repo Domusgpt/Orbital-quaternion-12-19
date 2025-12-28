@@ -100,7 +100,7 @@ SYSTEM ARCHITECTURE: 16-Point Compass Orbital System.
 
 MECHANICAL GRID MANIFEST:
 - Structure: 4x4 Grid (16 total cells).
-- Resolution: 1024x1024 (Overall), 256x256 (Per Cell).
+- Resolution: 512x512 (Overall), 128x128 (Per Cell).
 - Background: Solid Pure White (#FFFFFF).
 - Alignment: CENTROID ALIGNMENT (Object centered perfectly in each cell).
 - Scale: 75% VOLUMETRIC SCALE (Object fills 75% of cell height/width).
@@ -145,7 +145,7 @@ SYSTEM ARCHITECTURE: 16-Point OFFSET Angles (+11.25° from standard compass).
 
 MECHANICAL GRID MANIFEST:
 - Structure: 4x4 Grid (16 total cells).
-- Resolution: 1024x1024 (Overall), 256x256 (Per Cell).
+- Resolution: 512x512 (Overall), 128x128 (Per Cell).
 - Background: Solid Pure White (#FFFFFF).
 - Alignment: CENTROID ALIGNMENT (Object centered perfectly in each cell).
 - Scale: 75% VOLUMETRIC SCALE (Object fills 75% of cell height/width).
@@ -185,7 +185,7 @@ CRITICAL GENERATION RULES:
   // Generate base sheet first
   const generateBaseSheet = async (): Promise<string> => {
     const response: GenerateContentResponse = await ai.models.generateContent({
-      model: "gemini-2.5-flash-preview-05-20",
+      model: "gemini-2.5-flash-image",
       contents: {
         parts: [
           { inlineData: { data: frontData, mimeType: "image/png" } },
@@ -194,7 +194,7 @@ CRITICAL GENERATION RULES:
         ]
       },
       config: {
-        imageConfig: { aspectRatio: "1:1", imageSize: "1K" }
+        imageConfig: { aspectRatio: "1:1", imageSize: "512" }
       }
     });
 
@@ -218,7 +218,7 @@ CRITICAL GENERATION RULES:
   // Generate offset sheet using base sheet as reference
   const generateOffsetSheet = async (baseSheetData: string): Promise<string> => {
     const response: GenerateContentResponse = await ai.models.generateContent({
-      model: "gemini-2.5-flash-preview-05-20",
+      model: "gemini-2.5-flash-image",
       contents: {
         parts: [
           { inlineData: { data: frontData, mimeType: "image/png" } },
@@ -234,7 +234,7 @@ CRITICAL: The third image is the BASE SHEET you must match exactly.
         ]
       },
       config: {
-        imageConfig: { aspectRatio: "1:1", imageSize: "1K" }
+        imageConfig: { aspectRatio: "1:1", imageSize: "512" }
       }
     });
 
