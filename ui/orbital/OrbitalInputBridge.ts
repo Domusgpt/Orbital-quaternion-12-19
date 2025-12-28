@@ -20,9 +20,9 @@ export class OrbitalInputBridge {
   private velocity = 0;
   private frameId: number | null = null;
 
-  private readonly yawSensitivity = 0.003;   // Reduced from 0.006 - was 2x too sensitive
-  private readonly pitchSensitivity = 0.08;  // Reduced from 0.15
-  private readonly friction = 0.85;          // Increased damping from 0.94 (stops faster)
+  private readonly yawSensitivity = 0.0015;  // Reduced further for fine control
+  private readonly pitchSensitivity = 0.04;  // Reduced further
+  private readonly friction = 0.80;          // More damping (stops faster)
 
   constructor(element: HTMLElement, onUpdate: (data: OrbitalInputUpdate) => void) {
     this.element = element;

@@ -182,16 +182,15 @@ CRITICAL GENERATION RULES:
    - Angles increase CLOCKWISE when viewed from above
   `;
 
-  const generateSheet = async (isOffset: boolean): Promise<string> => {
-    const prompt = isOffset ? buildOffsetPrompt() : buildBasePrompt();
-
+  // Generate base sheet first
+  const generateBaseSheet = async (): Promise<string> => {
     const response: GenerateContentResponse = await ai.models.generateContent({
       model: "gemini-2.5-flash-preview-05-20",
       contents: {
         parts: [
           { inlineData: { data: frontData, mimeType: "image/png" } },
           { inlineData: { data: backData, mimeType: "image/png" } },
-          { text: prompt }
+          { text: buildBasePrompt() }
         ]
       },
       config: {
@@ -210,16 +209,56 @@ CRITICAL GENERATION RULES:
     }
 
     if (!imageUrl) {
-      throw new Error(`Failed to generate ${isOffset ? 'offset' : 'base'} sheet`);
+      throw new Error("Failed to generate base sheet");
     }
 
     return imageUrl;
   };
 
-  const [sheet0Url, sheet1Url] = await Promise.all([
-    generateSheet(false),  // Base angles
-    generateSheet(true)    // Offset angles (+11.25°)
-  ]);
+  // Generate offset sheet using base sheet as reference
+  const generateOffsetSheet = async (baseSheetData: string): Promise<string> => {
+    const response: GenerateContentResponse = await ai.models.generateContent({
+      model: "gemini-2.5-flash-preview-05-20",
+      contents: {
+        parts: [
+          { inlineData: { data: frontData, mimeType: "image/png" } },
+          { inlineData: { data: backData, mimeType: "image/png" } },
+          { inlineData: { data: baseSheetData, mimeType: "image/png" } },
+          { text: buildOffsetPrompt() + `
+
+CRITICAL: The third image is the BASE SHEET you must match exactly.
+- Use IDENTICAL object appearance, scale, lighting, and style
+- Each offset frame should be 11.25° rotated from the corresponding base frame
+- Row 1 Col 0 (11.25°) is between Base Row 1 Col 0 (N/0°) and Base Row 3 Col 1 (NNE/22.5°)
+- Maintain perfect visual consistency with the base sheet` }
+        ]
+      },
+      config: {
+        imageConfig: { aspectRatio: "1:1", imageSize: "1K" }
+      }
+    });
+
+    let imageUrl = "";
+    if (response.candidates?.[0]?.content?.parts) {
+      for (const part of response.candidates[0].content.parts) {
+        if (part.inlineData) {
+          imageUrl = `data:image/png;base64,${part.inlineData.data}`;
+          break;
+        }
+      }
+    }
+
+    if (!imageUrl) {
+      throw new Error("Failed to generate offset sheet");
+    }
+
+    return imageUrl;
+  };
+
+  // Generate sequentially: base first, then offset with base as reference
+  const sheet0Url = await generateBaseSheet();
+  const baseSheetData = sheet0Url.split(",")[1]; // Extract base64 data
+  const sheet1Url = await generateOffsetSheet(baseSheetData);
 
   return { sheet0Url, sheet1Url };
 };
