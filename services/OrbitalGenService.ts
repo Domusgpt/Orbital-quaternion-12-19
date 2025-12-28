@@ -186,16 +186,14 @@ CRITICAL GENERATION RULES:
     const prompt = isOffset ? buildOffsetPrompt() : buildBasePrompt();
 
     const response: GenerateContentResponse = await ai.models.generateContent({
-      model: "gemini-3-pro-image-preview",
-      contents: {
-        parts: [
-          { inlineData: { data: frontData, mimeType: "image/png" } },
-          { inlineData: { data: backData, mimeType: "image/png" } },
-          { text: prompt }
-        ]
-      },
+      model: "gemini-2.5-flash-image",
+      contents: [
+        { inlineData: { data: frontData, mimeType: "image/png" } },
+        { inlineData: { data: backData, mimeType: "image/png" } },
+        { text: prompt }
+      ],
       config: {
-        imageConfig: { aspectRatio: "1:1", imageSize: "1K" }
+        imageConfig: { aspectRatio: "1:1" }
       }
     });
 
