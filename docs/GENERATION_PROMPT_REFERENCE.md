@@ -18,7 +18,7 @@ This provides 11.25° angular resolution for smooth rotation.
 
 ### Model
 ```
-gemini-3-pro-image-preview
+gemini-2.0-flash-exp
 ```
 
 ### API Config
