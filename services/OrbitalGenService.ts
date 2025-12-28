@@ -194,7 +194,7 @@ CRITICAL GENERATION RULES:
         ]
       },
       config: {
-        responseModalities: ["image", "text"],
+        responseModalities: ["TEXT", "IMAGE"],
         imageConfig: { aspectRatio: "1:1", imageSize: "1K" }
       }
     });
@@ -235,7 +235,7 @@ CRITICAL: The third image is the BASE SHEET you must match exactly.
         ]
       },
       config: {
-        responseModalities: ["image", "text"],
+        responseModalities: ["TEXT", "IMAGE"],
         imageConfig: { aspectRatio: "1:1", imageSize: "1K" }
       }
     });
