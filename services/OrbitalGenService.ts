@@ -186,7 +186,7 @@ CRITICAL GENERATION RULES:
     const prompt = isOffset ? buildOffsetPrompt() : buildBasePrompt();
 
     const response: GenerateContentResponse = await ai.models.generateContent({
-      model: "gemini-2.5-flash-image",
+      model: "gemini-3-pro-image-preview",
       contents: {
         parts: [
           { inlineData: { data: frontData, mimeType: "image/png" } },
