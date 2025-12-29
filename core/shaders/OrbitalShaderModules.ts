@@ -55,12 +55,12 @@ export class OrbitalShaderManager {
       const float DEGREES_PER_FRAME_32 = 11.25; // For 32-frame mode (interleaved)
 
       /**
-       * Angular sequence lookup: maps angle index (0-15) to frame index in quadrant grid
-       * Frame layout follows compass quadrant grouping:
-       * Row 0: N(0), S(1), E(2), W(3)        - Cardinals
-       * Row 1: NW(4), NE(5), SE(6), SW(7)    - Intercardinals
-       * Row 2: NNW(8), NNE(9), SSE(10), SSW(11) - Fine N/S
-       * Row 3: WNW(12), ENE(13), ESE(14), WSW(15) - Fine E/W
+       * Angular sequence lookup: maps angle index (0-15) to frame index in grid
+       * Frame layout (logical hierarchy):
+       * Row 0: N(0), E(1), S(2), W(3)           - Cardinals
+       * Row 1: NE(4), SE(5), SW(6), NW(7)       - Intercardinals
+       * Row 2: NNE(8), ESE(9), SSW(10), WNW(11) - Cardinal+22.5°
+       * Row 3: ENE(12), SSE(13), WSW(14), NNW(15) - Intercardinal+22.5°
        *
        * Angular order: N→NNE→NE→ENE→E→ESE→SE→SSE→S→SSW→SW→WSW→W→WNW→NW→NNW
        */
@@ -68,21 +68,21 @@ export class OrbitalShaderManager {
         int idx = int(mod(float(angleIndex), 16.0));
 
         if (idx == 0) return 0.0;   // N (0°)
-        if (idx == 1) return 9.0;   // NNE (22.5°)
-        if (idx == 2) return 5.0;   // NE (45°)
-        if (idx == 3) return 13.0;  // ENE (67.5°)
-        if (idx == 4) return 2.0;   // E (90°)
-        if (idx == 5) return 14.0;  // ESE (112.5°)
-        if (idx == 6) return 6.0;   // SE (135°)
-        if (idx == 7) return 10.0;  // SSE (157.5°)
-        if (idx == 8) return 1.0;   // S (180°)
-        if (idx == 9) return 11.0;  // SSW (202.5°)
-        if (idx == 10) return 7.0;  // SW (225°)
-        if (idx == 11) return 15.0; // WSW (247.5°)
+        if (idx == 1) return 8.0;   // NNE (22.5°)
+        if (idx == 2) return 4.0;   // NE (45°)
+        if (idx == 3) return 12.0;  // ENE (67.5°)
+        if (idx == 4) return 1.0;   // E (90°)
+        if (idx == 5) return 9.0;   // ESE (112.5°)
+        if (idx == 6) return 5.0;   // SE (135°)
+        if (idx == 7) return 13.0;  // SSE (157.5°)
+        if (idx == 8) return 2.0;   // S (180°)
+        if (idx == 9) return 10.0;  // SSW (202.5°)
+        if (idx == 10) return 6.0;  // SW (225°)
+        if (idx == 11) return 14.0; // WSW (247.5°)
         if (idx == 12) return 3.0;  // W (270°)
-        if (idx == 13) return 12.0; // WNW (292.5°)
-        if (idx == 14) return 4.0;  // NW (315°)
-        return 8.0;                 // NNW (337.5°)
+        if (idx == 13) return 11.0; // WNW (292.5°)
+        if (idx == 14) return 7.0;  // NW (315°)
+        return 15.0;                // NNW (337.5°)
       }
 
       /**

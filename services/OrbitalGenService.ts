@@ -7,16 +7,16 @@ export type OrbitalGridResult = {
 };
 
 /**
- * Generate the quadrant-based 4x4 sprite sheet for orbital viewing.
+ * Generate the 4x4 sprite sheet for orbital viewing.
  *
- * Grid Layout (organized by directional hierarchy, NOT angular sequence):
+ * Grid Layout (logical hierarchy - main views first, then offsets):
  *
- * Row 0 (Cardinals):      N(0°)      S(180°)    E(90°)     W(270°)
- * Row 1 (Intercardinals): NW(315°)   NE(45°)    SE(135°)   SW(225°)
- * Row 2 (Fine-N/S):       NNW(337.5°) NNE(22.5°) SSE(157.5°) SSW(202.5°)
- * Row 3 (Fine-E/W):       WNW(292.5°) ENE(67.5°) ESE(112.5°) WSW(247.5°)
+ * Row 0 (Cardinals):           N(0°)     E(90°)    S(180°)   W(270°)
+ * Row 1 (Intercardinals):      NE(45°)   SE(135°)  SW(225°)  NW(315°)
+ * Row 2 (Cardinal+22.5°):      22.5°     112.5°    202.5°    292.5°
+ * Row 3 (Intercardinal+22.5°): 67.5°     157.5°    247.5°    337.5°
  *
- * The shader handles the non-sequential angular stitching via lookup table.
+ * All 16 angles at 22.5° intervals on a single sheet.
  */
 export const generateOrbitalAssets = async (
   productName: string,
@@ -32,165 +32,81 @@ export const generateOrbitalAssets = async (
   const frontData = frontImageBase64.split(",")[1];
   const backData = backImageBase64.split(",")[1];
 
-  // Build the quadrant grid description - base angles (0°, 22.5°, 45°, ...)
-  const buildQuadrantDescriptionBase = (): string => {
+  // Build the grid description - all 16 angles on one sheet
+  const buildGridDescription = (): string => {
     const rows: string[] = [];
 
-    rows.push(`ROW 1 (Cardinals - Primary views, 90° apart):
-  Col 0: NORTH (0°) - Direct front view, facing camera
-  Col 1: SOUTH (180°) - Direct back view, back to camera
-  Col 2: EAST (90°) - Right profile, 90° clockwise from front
-  Col 3: WEST (270°) - Left profile, 90° counter-clockwise from front`);
+    rows.push(`ROW 1 (Cardinals - The 4 main views, 90° apart):
+  Col 0: FRONT (0°) - Direct front view, facing camera
+  Col 1: RIGHT (90°) - Right side profile, 90° clockwise from front
+  Col 2: BACK (180°) - Direct back view, opposite of front
+  Col 3: LEFT (270°) - Left side profile, 90° counter-clockwise from front`);
 
-    rows.push(`ROW 2 (Intercardinals - 3/4 views, 45° from cardinals):
-  Col 0: NORTHWEST (315°) - 3/4 front-left view
-  Col 1: NORTHEAST (45°) - 3/4 front-right view
-  Col 2: SOUTHEAST (135°) - 3/4 back-right view
-  Col 3: SOUTHWEST (225°) - 3/4 back-left view`);
+    rows.push(`ROW 2 (Intercardinals - The 4 corner/diagonal views, 45° from cardinals):
+  Col 0: FRONT-RIGHT (45°) - 3/4 view showing front and right side
+  Col 1: BACK-RIGHT (135°) - 3/4 view showing back and right side
+  Col 2: BACK-LEFT (225°) - 3/4 view showing back and left side
+  Col 3: FRONT-LEFT (315°) - 3/4 view showing front and left side`);
 
-    rows.push(`ROW 3 (Fine North/South - 22.5° precision):
-  Col 0: NORTH-NORTHWEST (337.5°) - Slight left from front
-  Col 1: NORTH-NORTHEAST (22.5°) - Slight right from front
-  Col 2: SOUTH-SOUTHEAST (157.5°) - Slight right from back
-  Col 3: SOUTH-SOUTHWEST (202.5°) - Slight left from back`);
+    rows.push(`ROW 3 (Cardinal Offsets - Each Row 1 view rotated 22.5° clockwise):
+  Col 0: 22.5° - Slightly rotated from FRONT toward FRONT-RIGHT
+  Col 1: 112.5° - Slightly rotated from RIGHT toward BACK-RIGHT
+  Col 2: 202.5° - Slightly rotated from BACK toward BACK-LEFT
+  Col 3: 292.5° - Slightly rotated from LEFT toward FRONT-LEFT`);
 
-    rows.push(`ROW 4 (Fine East/West - 22.5° precision):
-  Col 0: WEST-NORTHWEST (292.5°) - Between left profile and 3/4 front-left
-  Col 1: EAST-NORTHEAST (67.5°) - Between 3/4 front-right and right profile
-  Col 2: EAST-SOUTHEAST (112.5°) - Between right profile and 3/4 back-right
-  Col 3: WEST-SOUTHWEST (247.5°) - Between 3/4 back-left and left profile`);
+    rows.push(`ROW 4 (Intercardinal Offsets - Each Row 2 view rotated 22.5° clockwise):
+  Col 0: 67.5° - Between FRONT-RIGHT and RIGHT
+  Col 1: 157.5° - Between BACK-RIGHT and BACK
+  Col 2: 247.5° - Between BACK-LEFT and LEFT
+  Col 3: 337.5° - Between FRONT-LEFT and FRONT`);
 
     return rows.join('\n\n');
   };
 
-  // Build offset angle grid (+11.25° from base for 32-frame interleaving)
-  const buildQuadrantDescriptionOffset = (): string => {
-    const rows: string[] = [];
+  const buildPrompt = () => `
+TASK: Generate a 4x4 rotation sprite sheet for "${productName}".
 
-    rows.push(`ROW 1 (Offset Cardinals - 11.25° offset from base):
-  Col 0: 11.25° - Between front and NNE
-  Col 1: 191.25° - Between back and SSW
-  Col 2: 101.25° - Between right profile and ESE
-  Col 3: 281.25° - Between left profile and WNW`);
+GRID STRUCTURE:
+- 4x4 Grid (16 total cells)
+- Resolution: 1024x1024 overall, 256x256 per cell
+- Background: Pure White (#FFFFFF)
+- Object: Centered in each cell, 75% of cell size
 
-    rows.push(`ROW 2 (Offset Intercardinals - 11.25° offset):
-  Col 0: 326.25° - Between NW and NNW
-  Col 1: 56.25° - Between NE and ENE
-  Col 2: 146.25° - Between SE and SSE
-  Col 3: 236.25° - Between SW and WSW`);
+CELL LAYOUT:
+${buildGridDescription()}
 
-    rows.push(`ROW 3 (Offset Fine N/S - 11.25° offset):
-  Col 0: 348.75° - Between NNW and N
-  Col 1: 33.75° - Between NNE and NE
-  Col 2: 168.75° - Between SSE and S
-  Col 3: 213.75° - Between SSW and SW`);
+GENERATION RULES:
 
-    rows.push(`ROW 4 (Offset Fine E/W - 11.25° offset):
-  Col 0: 303.75° - Between WNW and NW
-  Col 1: 78.75° - Between ENE and E
-  Col 2: 123.75° - Between ESE and SE
-  Col 3: 258.75° - Between WSW and W`);
+1. ROW PRIORITY:
+   - Row 1: The 4 main views (front, right, back, left) - get these perfect first
+   - Row 2: The 4 diagonal views (corners) - between the main views
+   - Rows 3-4: Slight rotations of Rows 1-2 (22.5° offset)
 
-    return rows.join('\n\n');
-  };
+2. ROTATION LOGIC:
+   - Imagine the object on a turntable rotating clockwise
+   - 0° = front (as shown in first reference image)
+   - 90° = right side visible
+   - 180° = back (as shown in second reference image)
+   - 270° = left side visible
 
-  const buildBasePrompt = () => `
-TASK: Generate a "Compass Quadrant Sprite Sheet" for "${productName}".
-SYSTEM ARCHITECTURE: 16-Point Compass Orbital System.
+3. CONSISTENCY:
+   - SAME object in every cell - only viewing angle changes
+   - SAME scale, lighting, and centering throughout
+   - Smooth visual progression between adjacent angles
 
-MECHANICAL GRID MANIFEST:
-- Structure: 4x4 Grid (16 total cells).
-- Resolution: 1024x1024 (Overall), 256x256 (Per Cell).
-- Background: Solid Pure White (#FFFFFF).
-- Alignment: CENTROID ALIGNMENT (Object centered perfectly in each cell).
-- Scale: 75% VOLUMETRIC SCALE (Object fills 75% of cell height/width).
-
-COMPASS QUADRANT LAYOUT:
-${buildQuadrantDescriptionBase()}
-
-CRITICAL GENERATION RULES:
-
-1. HIERARCHICAL IMPORTANCE:
-   - Row 1 (Cardinals) are the anchor frames - most important for recognition
-   - Row 2 (Intercardinals) bridge the 90° gaps smoothly
-   - Rows 3-4 (Fine directions) add smooth interpolation detail
-
-2. ANGULAR CONSISTENCY:
-   - Each frame MUST represent its exact compass direction
-   - Adjacent directions (22.5° apart) must blend smoothly
-   - N(0°) and NNW(337.5°) must visually connect (wrap-around)
-
-3. OBJECT IDENTITY:
-   - Product must be 100% identical in every frame
-   - Only the viewing angle changes, never the object itself
-   - Maintain consistent scale, lighting, and detail level
-
-4. TECHNICAL REQUIREMENTS:
-   - NO BORDERS: No grid lines or text labels
-   - CAMERA LOCK: Fixed height, fixed focal length, EYE-LEVEL (pitch 0°)
-   - PURE WHITE BACKGROUND: #FFFFFF exactly
-   - SEAMLESS EDGES: No artifacts at cell boundaries
-
-5. ROTATION REFERENCE:
-   - N (0°): Front view as shown in reference image
-   - Angles increase CLOCKWISE when viewed from above
-   - E (90°): 90° clockwise = right side visible
-   - S (180°): Back view, opposite of front
-   - W (270°): 270° clockwise = left side visible
+4. TECHNICAL:
+   - NO borders, grid lines, or labels
+   - NO text or watermarks
+   - Pure white background only
   `;
 
-  const buildOffsetPrompt = () => `
-TASK: Generate an "Offset Angle Sprite Sheet" for "${productName}".
-SYSTEM ARCHITECTURE: 16-Point OFFSET Angles (+11.25° from standard compass).
-
-MECHANICAL GRID MANIFEST:
-- Structure: 4x4 Grid (16 total cells).
-- Resolution: 1024x1024 (Overall), 256x256 (Per Cell).
-- Background: Solid Pure White (#FFFFFF).
-- Alignment: CENTROID ALIGNMENT (Object centered perfectly in each cell).
-- Scale: 75% VOLUMETRIC SCALE (Object fills 75% of cell height/width).
-
-OFFSET ANGLE LAYOUT (each angle is 11.25° AFTER the standard compass direction):
-${buildQuadrantDescriptionOffset()}
-
-CRITICAL GENERATION RULES:
-
-1. OFFSET PURPOSE:
-   - These frames fill the gaps between standard compass directions
-   - Combined with base sheet, creates 32 total angles (11.25° apart)
-   - Each frame is exactly halfway between two standard compass points
-
-2. ANGULAR PRECISION:
-   - Each frame MUST represent its EXACT offset angle
-   - 11.25° is a small rotation - frames should look very similar to adjacent base frames
-   - Smooth progression between all 32 combined angles
-
-3. OBJECT IDENTITY:
-   - Product must be 100% identical to base sheet
-   - Same scale, same lighting, same detail level
-   - ONLY viewing angle differs
-
-4. TECHNICAL REQUIREMENTS:
-   - NO BORDERS: No grid lines or text labels
-   - CAMERA LOCK: Fixed height, fixed focal length, EYE-LEVEL (pitch 0°)
-   - PURE WHITE BACKGROUND: #FFFFFF exactly
-   - MATCH BASE SHEET: Same object appearance, just rotated 11.25° from base positions
-
-5. ROTATION REFERENCE:
-   - All angles are 11.25° clockwise from standard compass
-   - 11.25° = halfway between N(0°) and NNE(22.5°)
-   - Angles increase CLOCKWISE when viewed from above
-  `;
-
-  const generateSheet = async (isOffset: boolean): Promise<string> => {
-    const prompt = isOffset ? buildOffsetPrompt() : buildBasePrompt();
-
+  const generateSheet = async (): Promise<string> => {
     const response: GenerateContentResponse = await ai.models.generateContent({
       model: "gemini-2.5-flash-image",
       contents: [
         { inlineData: { data: frontData, mimeType: "image/png" } },
         { inlineData: { data: backData, mimeType: "image/png" } },
-        { text: prompt }
+        { text: buildPrompt() }
       ],
       config: {
         imageConfig: { aspectRatio: "1:1" }
@@ -208,18 +124,17 @@ CRITICAL GENERATION RULES:
     }
 
     if (!imageUrl) {
-      throw new Error(`Failed to generate ${isOffset ? 'offset' : 'base'} sheet`);
+      throw new Error("Failed to generate sprite sheet");
     }
 
     return imageUrl;
   };
 
-  const [sheet0Url, sheet1Url] = await Promise.all([
-    generateSheet(false),  // Base angles
-    generateSheet(true)    // Offset angles (+11.25°)
-  ]);
+  // Generate single sheet with all 16 angles
+  const sheetUrl = await generateSheet();
 
-  return { sheet0Url, sheet1Url };
+  // Return same sheet for both (backward compatible)
+  return { sheet0Url: sheetUrl, sheet1Url: sheetUrl };
 };
 
 /**

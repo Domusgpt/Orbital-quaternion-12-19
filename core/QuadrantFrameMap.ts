@@ -1,19 +1,19 @@
 /**
  * QuadrantFrameMap.ts
  *
- * Defines the compass-quadrant frame system where frames are organized
- * by directional hierarchy (cardinals → intercardinals → fine directions)
- * rather than sequential angular order.
+ * Defines the frame system with logical hierarchy:
+ * - Row 0-1: Main views (cardinals + intercardinals)
+ * - Row 2-3: Offset views (+22.5° from main views)
  *
  * Grid Layout (4x4, 16 frames):
  * ┌─────────┬─────────┬─────────┬─────────┐
- * │ N (0°)  │ S (180°)│ E (90°) │ W (270°)│ Row 0: Cardinals
+ * │ N (0°)  │ E (90°) │ S (180°)│ W (270°)│ Row 0: Cardinals
  * ├─────────┼─────────┼─────────┼─────────┤
- * │NW (315°)│NE (45°) │SE (135°)│SW (225°)│ Row 1: Intercardinals
+ * │NE (45°) │SE (135°)│SW (225°)│NW (315°)│ Row 1: Intercardinals
  * ├─────────┼─────────┼─────────┼─────────┤
- * │NNW(337°)│NNE (22°)│SSE(157°)│SSW(202°)│ Row 2: Fine-N/S
+ * │ 22.5°   │ 112.5°  │ 202.5°  │ 292.5°  │ Row 2: Cardinal+22.5°
  * ├─────────┼─────────┼─────────┼─────────┤
- * │WNW(292°)│ENE (67°)│ESE(112°)│WSW(247°)│ Row 3: Fine-E/W
+ * │ 67.5°   │ 157.5°  │ 247.5°  │ 337.5°  │ Row 3: Intercardinal+22.5°
  * └─────────┴─────────┴─────────┴─────────┘
  */
 
@@ -31,24 +31,24 @@ export interface CompassFrame {
 export const QUADRANT_GRID: CompassFrame[] = [
   // Row 0: Cardinals (90° apart)
   { direction: 'N',   angle: 0,     gridRow: 0, gridCol: 0, frameIndex: 0 },
-  { direction: 'S',   angle: 180,   gridRow: 0, gridCol: 1, frameIndex: 1 },
-  { direction: 'E',   angle: 90,    gridRow: 0, gridCol: 2, frameIndex: 2 },
+  { direction: 'E',   angle: 90,    gridRow: 0, gridCol: 1, frameIndex: 1 },
+  { direction: 'S',   angle: 180,   gridRow: 0, gridCol: 2, frameIndex: 2 },
   { direction: 'W',   angle: 270,   gridRow: 0, gridCol: 3, frameIndex: 3 },
   // Row 1: Intercardinals (45° from cardinals)
-  { direction: 'NW',  angle: 315,   gridRow: 1, gridCol: 0, frameIndex: 4 },
-  { direction: 'NE',  angle: 45,    gridRow: 1, gridCol: 1, frameIndex: 5 },
-  { direction: 'SE',  angle: 135,   gridRow: 1, gridCol: 2, frameIndex: 6 },
-  { direction: 'SW',  angle: 225,   gridRow: 1, gridCol: 3, frameIndex: 7 },
-  // Row 2: Fine-N/S (22.5° precision)
-  { direction: 'NNW', angle: 337.5, gridRow: 2, gridCol: 0, frameIndex: 8 },
-  { direction: 'NNE', angle: 22.5,  gridRow: 2, gridCol: 1, frameIndex: 9 },
-  { direction: 'SSE', angle: 157.5, gridRow: 2, gridCol: 2, frameIndex: 10 },
-  { direction: 'SSW', angle: 202.5, gridRow: 2, gridCol: 3, frameIndex: 11 },
-  // Row 3: Fine-E/W (22.5° precision)
-  { direction: 'WNW', angle: 292.5, gridRow: 3, gridCol: 0, frameIndex: 12 },
-  { direction: 'ENE', angle: 67.5,  gridRow: 3, gridCol: 1, frameIndex: 13 },
-  { direction: 'ESE', angle: 112.5, gridRow: 3, gridCol: 2, frameIndex: 14 },
-  { direction: 'WSW', angle: 247.5, gridRow: 3, gridCol: 3, frameIndex: 15 },
+  { direction: 'NE',  angle: 45,    gridRow: 1, gridCol: 0, frameIndex: 4 },
+  { direction: 'SE',  angle: 135,   gridRow: 1, gridCol: 1, frameIndex: 5 },
+  { direction: 'SW',  angle: 225,   gridRow: 1, gridCol: 2, frameIndex: 6 },
+  { direction: 'NW',  angle: 315,   gridRow: 1, gridCol: 3, frameIndex: 7 },
+  // Row 2: Cardinal offsets (+22.5°)
+  { direction: 'NNE', angle: 22.5,  gridRow: 2, gridCol: 0, frameIndex: 8 },
+  { direction: 'ESE', angle: 112.5, gridRow: 2, gridCol: 1, frameIndex: 9 },
+  { direction: 'SSW', angle: 202.5, gridRow: 2, gridCol: 2, frameIndex: 10 },
+  { direction: 'WNW', angle: 292.5, gridRow: 2, gridCol: 3, frameIndex: 11 },
+  // Row 3: Intercardinal offsets (+22.5°)
+  { direction: 'ENE', angle: 67.5,  gridRow: 3, gridCol: 0, frameIndex: 12 },
+  { direction: 'SSE', angle: 157.5, gridRow: 3, gridCol: 1, frameIndex: 13 },
+  { direction: 'WSW', angle: 247.5, gridRow: 3, gridCol: 2, frameIndex: 14 },
+  { direction: 'NNW', angle: 337.5, gridRow: 3, gridCol: 3, frameIndex: 15 },
 ];
 
 /**
@@ -58,22 +58,22 @@ export const QUADRANT_GRID: CompassFrame[] = [
  * Sequence: N(0°) → NNE(22.5°) → NE(45°) → ENE(67.5°) → E(90°) → ...
  */
 export const ANGULAR_SEQUENCE: number[] = [
-  0,   // Angle 0:   N     (0°)
-  9,   // Angle 1:   NNE   (22.5°)
-  5,   // Angle 2:   NE    (45°)
-  13,  // Angle 3:   ENE   (67.5°)
-  2,   // Angle 4:   E     (90°)
-  14,  // Angle 5:   ESE   (112.5°)
-  6,   // Angle 6:   SE    (135°)
-  10,  // Angle 7:   SSE   (157.5°)
-  1,   // Angle 8:   S     (180°)
-  11,  // Angle 9:   SSW   (202.5°)
-  7,   // Angle 10:  SW    (225°)
-  15,  // Angle 11:  WSW   (247.5°)
-  3,   // Angle 12:  W     (270°)
-  12,  // Angle 13:  WNW   (292.5°)
-  4,   // Angle 14:  NW    (315°)
-  8,   // Angle 15:  NNW   (337.5°)
+  0,   // Angle 0:   N     (0°)     - Row 0, Col 0
+  8,   // Angle 1:   NNE   (22.5°)  - Row 2, Col 0
+  4,   // Angle 2:   NE    (45°)    - Row 1, Col 0
+  12,  // Angle 3:   ENE   (67.5°)  - Row 3, Col 0
+  1,   // Angle 4:   E     (90°)    - Row 0, Col 1
+  9,   // Angle 5:   ESE   (112.5°) - Row 2, Col 1
+  5,   // Angle 6:   SE    (135°)   - Row 1, Col 1
+  13,  // Angle 7:   SSE   (157.5°) - Row 3, Col 1
+  2,   // Angle 8:   S     (180°)   - Row 0, Col 2
+  10,  // Angle 9:   SSW   (202.5°) - Row 2, Col 2
+  6,   // Angle 10:  SW    (225°)   - Row 1, Col 2
+  14,  // Angle 11:  WSW   (247.5°) - Row 3, Col 2
+  3,   // Angle 12:  W     (270°)   - Row 0, Col 3
+  11,  // Angle 13:  WNW   (292.5°) - Row 2, Col 3
+  7,   // Angle 14:  NW    (315°)   - Row 1, Col 3
+  15,  // Angle 15:  NNW   (337.5°) - Row 3, Col 3
 ];
 
 /**
