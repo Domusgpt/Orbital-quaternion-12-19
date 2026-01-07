@@ -115,10 +115,7 @@ CRITICAL GENERATION RULES:
         { inlineData: { data: frontData, mimeType: "image/png" } },
         { inlineData: { data: backData, mimeType: "image/png" } },
         { text: buildBasePrompt() }
-      ],
-      config: {
-        imageConfig: { aspectRatio: "1:1" }
-      }
+      ]
     });
 
     let imageUrl = "";
